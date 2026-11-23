@@ -53,5 +53,7 @@ public abstract class OnyxListenerAdapter {
     public void onAutocompleteInteraction(AutocompleteInteractionEvent event) {
     }
 
+    public void onReconnect(ReadyEvent event) {
+    }
 
 }

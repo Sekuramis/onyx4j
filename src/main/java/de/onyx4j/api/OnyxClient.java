@@ -23,6 +23,10 @@ import de.onyx4j.api.events.interaction.ModalInteractionEvent;
 import de.onyx4j.api.events.interaction.AutocompleteInteractionEvent;
 import de.onyx4j.api.interactions.commands.CommandRegistry;
 import de.onyx4j.api.events.interaction.InteractionAutoDefer;
+import de.onyx4j.api.cache.EntityCache;
+import de.onyx4j.api.gateway.EventFilter;
+import de.onyx4j.api.gateway.GatewayStatus;
+
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -48,6 +52,10 @@ public final class OnyxClient
 	private final AtomicBoolean started;
 	private final CommandRegistry commandRegistry;
 	private final InteractionAutoDefer autoDefer = new InteractionAutoDefer(2500);
+	private final EntityCache entityCache;
+	private final GatewayStatus gatewayStatus = new GatewayStatus();
+	private volatile EventFilter eventFilter = EventFilter.all();
+
 
 	private volatile boolean connected;
 	private volatile boolean everReady;
@@ -60,6 +68,7 @@ public final class OnyxClient
 		this.listeners = new CopyOnWriteArrayList<>(listeners);
 		this.ready = new CompletableFuture<>();
 		this.started = new AtomicBoolean();
+		this.entityCache = new EntityCache(this);
 
 		this.gateway = new OnyxGateway(baseUrl, token, this::handleReady, this::handleGatewayEvent,
 				this::handleInteraction, this::handleDisconnect, this::handleError);
@@ -68,9 +77,7 @@ public final class OnyxClient
 	public void connect()
 	{
 		if (!started.compareAndSet(false, true))
-		{
 			return;
-		}
 
 		rest.get("/apps/@me").thenCompose(result -> commandRegistry.syncIfEnabled()).whenComplete((result, error) ->
 		{
@@ -84,47 +91,58 @@ public final class OnyxClient
 			try
 			{
 				gateway.connect();
+				gatewayStatus.markConnecting();
 			} catch (Exception exception)
 			{
 				ready.completeExceptionally(exception);
 				handleError(exception);
+				gatewayStatus.markDisconnected("Connection initialization failed");
 			}
 		});
 	}
 
+
 	private void handleReady(JsonObject data)
 	{
 		if (shuttingDown)
-		{
 			return;
-		}
 
 		boolean reconnect = everReady;
 		everReady = true;
 		connected = true;
 
+		if (reconnect)
+			entityCache.clear();
+
+		gatewayStatus.markReady();
+
 		ReadyEvent event = new ReadyEvent(this, reconnect, data);
 
 		ready.complete(this);
 		dispatch(listener -> listener.onReady(event));
+
+		if (reconnect)
+			dispatch(listener -> listener.onReconnect(event));
 	}
 
 	private void handleGatewayEvent(JsonObject payload)
 	{
 		if (shuttingDown || !payload.has("type"))
-		{
 			return;
-		}
 
 		GatewayEvent event = new GatewayEvent(this, payload);
 		String type = event.getType();
 
+		entityCache.apply(event);
+
+		if (!eventFilter.allows(event))
+			return;
+
+
 		dispatch(listener -> listener.onGatewayEvent(event));
 
 		if (type == null)
-		{
 			return;
-		}
 
 		switch (type)
 		{
@@ -233,6 +251,10 @@ public final class OnyxClient
 
 		if (!shuttingDown)
 			dispatch(listener -> listener.onDisconnect(reason));
+
+		gatewayStatus.markShutdown();
+		entityCache.clear();
+
 	}
 
 	private void handleError(Throwable error)
@@ -355,5 +377,18 @@ public final class OnyxClient
 	{
 		return commandRegistry;
 	}
+
+	public EntityCache getEntityCache() {
+		return entityCache;
+	}
+
+	public GatewayStatus getGatewayStatus() {
+		return gatewayStatus;
+	}
+
+	public void setEventFilter(EventFilter filter) {
+		this.eventFilter = java.util.Objects.requireNonNull(filter);
+	}
+
 
 }
