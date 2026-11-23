@@ -18,6 +18,10 @@ import de.onyx4j.api.gateway.OnyxGateway;
 import de.onyx4j.api.requests.CommandUpdateAction;
 import de.onyx4j.api.requests.OnyxRestClient;
 import de.onyx4j.api.requests.RestAction;
+import de.onyx4j.api.events.interaction.ComponentInteractionEvent;
+import de.onyx4j.api.events.interaction.ModalInteractionEvent;
+import de.onyx4j.api.events.interaction.AutocompleteInteractionEvent;
+
 
 
 import java.util.List;
@@ -140,34 +144,68 @@ public final class OnyxClient {
         }
     }
 
+
     private void handleInteraction(JsonObject payload) {
         if (shuttingDown) {
             return;
         }
 
-        if (!payload.has("type")
-                || !payload.get("type").getAsString().equals("command")) {
+        if (!payload.has("type") || payload.get("type").isJsonNull()) {
             return;
         }
 
-        if (!payload.has("command")
-                || !payload.get("command").isJsonObject()) {
-            return;
+        String type = payload.get("type").getAsString();
+
+        switch (type) {
+        case "component" -> {
+            ComponentInteractionEvent event =
+                    new ComponentInteractionEvent(this, payload);
+
+            dispatch(listener ->
+                    listener.onComponentInteraction(event));
         }
 
-        JsonObject command = payload.getAsJsonObject("command");
+        case "modal" -> {
+            ModalInteractionEvent event =
+                    new ModalInteractionEvent(this, payload);
 
-        if (command.has("type")
-                && !command.get("type").getAsString().equals("slash")) {
-            return;
+            dispatch(listener ->
+                    listener.onModalInteraction(event));
         }
 
-        SlashCommandInteractionEvent event =
-                new SlashCommandInteractionEvent(this, payload);
+        case "command" -> {
+            if (!payload.has("command")
+                    || !payload.get("command").isJsonObject()) {
+                return;
+            }
 
-        dispatch(listener ->
-                listener.onSlashCommandInteraction(event));
+            JsonObject command = payload.getAsJsonObject("command");
+
+            if (command.has("type")
+                    && !command.get("type").getAsString().equals("slash")) {
+                return;
+            }
+
+            SlashCommandInteractionEvent event =
+                    new SlashCommandInteractionEvent(this, payload);
+
+            dispatch(listener ->
+                    listener.onSlashCommandInteraction(event));
+        }
+
+        case "autocomplete" -> {
+            AutocompleteInteractionEvent event =
+                    new AutocompleteInteractionEvent(this, payload);
+
+            dispatch(listener ->
+                    listener.onAutocompleteInteraction(event));
+        }
+
+        default -> {
+        }
+        }
     }
+
 
     private void handleDisconnect(String reason) {
         connected = false;

@@ -3,6 +3,11 @@ package de.onyx4j.api.events;
 import de.onyx4j.api.events.interaction.SlashCommandInteractionEvent;
 import de.onyx4j.api.events.member.MemberJoinEvent;
 import de.onyx4j.api.events.message.MessageReceivedEvent;
+import de.onyx4j.api.events.interaction.ComponentInteractionEvent;
+import de.onyx4j.api.events.interaction.ModalInteractionEvent;
+import de.onyx4j.api.events.interaction.AutocompleteInteractionEvent;
+
+
 
 /**
  * © Copyright 23.11.2026 - 16:52 – Urheberrechtshinweis
@@ -38,4 +43,15 @@ public abstract class OnyxListenerAdapter {
 
     public void onError(Throwable error) {
     }
+
+    public void onComponentInteraction(ComponentInteractionEvent event) {
+    }
+
+    public void onModalInteraction(ModalInteractionEvent event) {
+    }
+
+    public void onAutocompleteInteraction(AutocompleteInteractionEvent event) {
+    }
+
+
 }

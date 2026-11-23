@@ -1,6 +1,13 @@
 package de.onyx4j.api.interactions.commands;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.regex.Pattern;
+
 /**
  * © Copyright 23.11.2026 - 16:52 – Urheberrechtshinweis
  * Alle Inhalte dieser Software, insbesondere der Quellcode, sind urheberrechtlich geschützt.
@@ -14,14 +21,83 @@ import com.google.gson.JsonObject;
 public record SlashCommandData(
         String name,
         String description,
-        String type
+        String type,
+        List<CommandOptionData> options
 ) {
 
+    private static final Pattern NAME_PATTERN = Pattern.compile("[a-z0-9_-]{1,32}");
+
+    public SlashCommandData {
+        if (name == null || !NAME_PATTERN.matcher(name).matches()) {
+            throw new IllegalArgumentException("Command name must match [a-z0-9_-]{1,32}");
+        }
+
+        if (description == null || description.isBlank()) {
+            throw new IllegalArgumentException("Command description must not be blank");
+        }
+
+        if (type == null || !type.equals("slash")) {
+            throw new IllegalArgumentException(
+                    "This command data type supports slash commands only"
+            );
+        }
+
+        options = List.copyOf(Objects.requireNonNull(options, "options"));
+    }
+
+    public SlashCommandData(String name, String description) {
+        this(name, description, "slash", List.of());
+    }
+
+    public SlashCommandData(String name, String description, String type) {
+        this(name, description, type, List.of());
+    }
+
+    public SlashCommandData addOptions(CommandOptionData... additional) {
+        Objects.requireNonNull(additional, "additional");
+
+        List<CommandOptionData> combined = new ArrayList<>(options);
+
+        for (CommandOptionData option : additional) {
+            Objects.requireNonNull(option, "option");
+
+            if (combined.stream().anyMatch(
+                    existing -> existing.getName().equals(option.getName())
+            )) {
+                throw new IllegalArgumentException(
+                        "Duplicate command option: " + option.getName()
+                );
+            }
+
+            combined.add(option);
+        }
+
+        if (combined.size() > 25) {
+            throw new IllegalArgumentException(
+                    "At most 25 command options are supported"
+            );
+        }
+
+        return new SlashCommandData(name, description, type, combined);
+    }
+
     public JsonObject toJson() {
-        JsonObject json = new JsonObject();
-        json.addProperty("name", name);
-        json.addProperty("description", description);
-        json.addProperty("type", type);
-        return json;
+        JsonObject object = new JsonObject();
+
+        object.addProperty("name", name);
+        object.addProperty("description", description);
+        object.addProperty("type", type);
+
+        if (!options.isEmpty()) {
+            JsonArray array = new JsonArray();
+
+            for (CommandOptionData option : options) {
+                array.add(option.toJson());
+            }
+
+            object.add("options", array);
+        }
+
+        return object;
     }
 }

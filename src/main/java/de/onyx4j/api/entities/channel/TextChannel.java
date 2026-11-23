@@ -131,6 +131,18 @@ public final class TextChannel implements MessageChannel, ServerChannel {
         });
     }
 
+    public RestAction<Message> sendMessage(JsonObject messageData) {
+        JsonObject payload = java.util.Objects
+                .requireNonNull(messageData)
+                .deepCopy();
+
+        return new RestAction<>(() ->
+                client.getRestClient()
+                        .post("/channels/" + encode(id) + "/messages", payload)
+                        .thenApply(this::toMessage)
+        );
+    }
+
     public RestAction<Message> sendReply(String messageId, String content) {
         Objects.requireNonNull(content, "content");
         if (content.isBlank()) {

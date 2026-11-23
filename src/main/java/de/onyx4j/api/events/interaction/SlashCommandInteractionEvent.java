@@ -1,5 +1,6 @@
 package de.onyx4j.api.events.interaction;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import de.onyx4j.api.OnyxClient;
 import de.onyx4j.api.requests.RestAction;
@@ -166,4 +167,30 @@ public final class SlashCommandInteractionEvent {
 
         return obj.get(key).getAsString();
     }
+
+
+    public Long getOptionAsLong(String name) {
+        JsonElement value = getOptions().get(name);
+
+        return value == null || value.isJsonNull()
+                ? null
+                : value.getAsLong();
+    }
+
+    public Double getOptionAsDouble(String name) {
+        JsonElement value = getOptions().get(name);
+
+        return value == null || value.isJsonNull()
+                ? null
+                : value.getAsDouble();
+    }
+
+    public Boolean getOptionAsBoolean(String name) {
+        JsonElement value = getOptions().get(name);
+
+        return value == null || value.isJsonNull()
+                ? null
+                : value.getAsBoolean();
+    }
+
 }

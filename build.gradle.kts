@@ -11,7 +11,7 @@ java {
 }
 
 group = "de.onyx4j"
-version = "0.4.0-SNAPSHOT"
+version = "0.5.1-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -22,6 +22,7 @@ dependencies {
     api("com.google.code.gson:gson:2.15.0")
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.yaml:snakeyaml:2.7")
 }
 
 tasks.test {
