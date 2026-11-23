@@ -26,13 +26,19 @@ import de.onyx4j.api.events.interaction.InteractionAutoDefer;
 import de.onyx4j.api.cache.EntityCache;
 import de.onyx4j.api.gateway.EventFilter;
 import de.onyx4j.api.gateway.GatewayStatus;
-
+import de.onyx4j.api.events.gateway.GatewayEventBus;
+import de.onyx4j.api.events.gateway.EventSubscription;
+import de.onyx4j.api.events.GatewayEvent;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * © Copyright 23.11.2026 - 16:51 – Urheberrechtshinweis Alle Inhalte dieser Software, insbesondere der Quellcode, sind
@@ -55,7 +61,7 @@ public final class OnyxClient
 	private final EntityCache entityCache;
 	private final GatewayStatus gatewayStatus = new GatewayStatus();
 	private volatile EventFilter eventFilter = EventFilter.all();
-
+	private final GatewayEventBus gatewayEventBus;
 
 	private volatile boolean connected;
 	private volatile boolean everReady;
@@ -72,6 +78,7 @@ public final class OnyxClient
 
 		this.gateway = new OnyxGateway(baseUrl, token, this::handleReady, this::handleGatewayEvent,
 				this::handleInteraction, this::handleDisconnect, this::handleError);
+		this.gatewayEventBus = new GatewayEventBus(this::handleError);
 	}
 
 	public void connect()
@@ -100,7 +107,6 @@ public final class OnyxClient
 			}
 		});
 	}
-
 
 	private void handleReady(JsonObject data)
 	{
@@ -138,6 +144,7 @@ public final class OnyxClient
 		if (!eventFilter.allows(event))
 			return;
 
+		gatewayEventBus.publish(event);
 
 		dispatch(listener -> listener.onGatewayEvent(event));
 
@@ -182,12 +189,7 @@ public final class OnyxClient
 		{
 			ComponentInteractionEvent event = new ComponentInteractionEvent(this, payload);
 
-			autoDefer.schedule(
-					event::isAcknowledged,
-					() -> event.deferReply().queue(),
-					this::handleError
-			);
-
+			autoDefer.schedule(event::isAcknowledged, () -> event.deferReply().queue(), this::handleError);
 
 			dispatch(listener -> listener.onComponentInteraction(event));
 		}
@@ -196,11 +198,7 @@ public final class OnyxClient
 		{
 			ModalInteractionEvent event = new ModalInteractionEvent(this, payload);
 
-			autoDefer.schedule(
-					event::isAcknowledged,
-					() -> event.deferReply().queue(),
-					this::handleError
-			);
+			autoDefer.schedule(event::isAcknowledged, () -> event.deferReply().queue(), this::handleError);
 
 			dispatch(listener -> listener.onModalInteraction(event));
 		}
@@ -217,11 +215,7 @@ public final class OnyxClient
 
 			SlashCommandInteractionEvent event = new SlashCommandInteractionEvent(this, payload);
 
-			autoDefer.schedule(
-					event::isAcknowledged,
-					() -> event.deferReply().queue(),
-					this::handleError
-			);
+			autoDefer.schedule(event::isAcknowledged, () -> event.deferReply().queue(), this::handleError);
 
 			dispatch(listener -> listener.onSlashCommandInteraction(event));
 		}
@@ -230,11 +224,7 @@ public final class OnyxClient
 		{
 			AutocompleteInteractionEvent event = new AutocompleteInteractionEvent(this, payload);
 
-			autoDefer.schedule(
-					event::isAcknowledged,
-					() -> event.deferReply().queue(),
-					this::handleError
-			);
+			autoDefer.schedule(event::isAcknowledged, () -> event.deferReply().queue(), this::handleError);
 
 			dispatch(listener -> listener.onAutocompleteInteraction(event));
 		}
@@ -371,6 +361,7 @@ public final class OnyxClient
 
 		gateway.disconnect();
 		autoDefer.close();
+		gatewayEventBus.close();
 	}
 
 	public CommandRegistry getCommandRegistry()
@@ -378,17 +369,40 @@ public final class OnyxClient
 		return commandRegistry;
 	}
 
-	public EntityCache getEntityCache() {
+	public EntityCache getEntityCache()
+	{
 		return entityCache;
 	}
 
-	public GatewayStatus getGatewayStatus() {
+	public GatewayStatus getGatewayStatus()
+	{
 		return gatewayStatus;
 	}
 
-	public void setEventFilter(EventFilter filter) {
+	public void setEventFilter(EventFilter filter)
+	{
 		this.eventFilter = java.util.Objects.requireNonNull(filter);
 	}
 
+	public GatewayEventBus getGatewayEventBus()
+	{
+		return gatewayEventBus;
+	}
+
+	public EventSubscription onGatewayEvent(String type, Consumer<GatewayEvent> handler)
+	{
+		return gatewayEventBus.on(type, handler);
+	}
+
+	public EventSubscription onceGatewayEvent(String type, Consumer<GatewayEvent> handler)
+	{
+		return gatewayEventBus.once(type, handler);
+	}
+
+	public CompletableFuture<GatewayEvent> waitForGatewayEvent(String type, Predicate<GatewayEvent> filter,
+			Duration timeout)
+	{
+		return gatewayEventBus.waitFor(type, filter, timeout);
+	}
 
 }
