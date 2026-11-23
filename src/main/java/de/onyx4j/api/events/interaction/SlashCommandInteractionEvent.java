@@ -193,4 +193,10 @@ public final class SlashCommandInteractionEvent {
                 : value.getAsBoolean();
     }
 
+
+    public synchronized boolean isAcknowledged() {
+        return responded;
+    }
+
+
 }

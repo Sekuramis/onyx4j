@@ -1,6 +1,7 @@
 package de.onyx4j.api;
 
 import de.onyx4j.api.events.OnyxListenerAdapter;
+import de.onyx4j.api.interactions.commands.SlashCommandData;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -20,6 +21,10 @@ public final class OnyxClientBuilder {
 
     private final String token;
     private String baseUrl = "https://onyx-clips.de";
+
+    private final java.util.List<SlashCommandData> registeredCommands =
+            new java.util.ArrayList<>();
+    private boolean autoSyncCommands = true;
 
     private final List<OnyxListenerAdapter> listeners =
             new ArrayList<>();
@@ -57,7 +62,23 @@ public final class OnyxClientBuilder {
                 List.copyOf(listeners)
         );
 
+        client.getCommandRegistry()
+                .addCommands(registeredCommands.toArray(SlashCommandData[]::new))
+                .setAutoSync(autoSyncCommands);
+
         client.connect();
         return client;
     }
+
+
+    public OnyxClientBuilder addCommands(SlashCommandData... commands) {
+        registeredCommands.addAll(java.util.List.of(commands));
+        return this;
+    }
+
+    public OnyxClientBuilder setAutoSyncCommands(boolean enabled) {
+        autoSyncCommands = enabled;
+        return this;
+    }
+
 }

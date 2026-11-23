@@ -21,304 +21,339 @@ import de.onyx4j.api.requests.RestAction;
 import de.onyx4j.api.events.interaction.ComponentInteractionEvent;
 import de.onyx4j.api.events.interaction.ModalInteractionEvent;
 import de.onyx4j.api.events.interaction.AutocompleteInteractionEvent;
-
-
+import de.onyx4j.api.interactions.commands.CommandRegistry;
+import de.onyx4j.api.events.interaction.InteractionAutoDefer;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+
 /**
- * © Copyright 23.11.2026 - 16:51 – Urheberrechtshinweis
- * Alle Inhalte dieser Software, insbesondere der Quellcode, sind urheberrechtlich geschützt.
- * Das Urheberrecht liegt, soweit nicht ausdrücklich anders gekennzeichnet,
- * bei @author Sekuramis | Jannik.
- * Bitte fragen Sie mich, falls Sie die Inhalte dieser Software verwenden möchten.
- * Diese Software kann soweit möglich, als API von anderen Entwicklern verwendet werden.
- * Wer gegen das Urheberrecht verstößt (z.B. Quellcode unerlaubt kopiert), macht sich
- * gem. §§ 106 ff. UrhG strafbar und wird zudem kostenpflichtig abgemahnt und muss Schadensersatz leisten (§ 97 UrhG).
+ * © Copyright 23.11.2026 - 16:51 – Urheberrechtshinweis Alle Inhalte dieser Software, insbesondere der Quellcode, sind
+ * urheberrechtlich geschützt. Das Urheberrecht liegt, soweit nicht ausdrücklich anders gekennzeichnet, bei @author
+ * Sekuramis | Jannik. Bitte fragen Sie mich, falls Sie die Inhalte dieser Software verwenden möchten. Diese Software
+ * kann soweit möglich, als API von anderen Entwicklern verwendet werden. Wer gegen das Urheberrecht verstößt (z.B.
+ * Quellcode unerlaubt kopiert), macht sich gem. §§ 106 ff. UrhG strafbar und wird zudem kostenpflichtig abgemahnt und
+ * muss Schadensersatz leisten (§ 97 UrhG).
  */
-public final class OnyxClient {
+public final class OnyxClient
+{
 
-    private final OnyxRestClient rest;
-    private final OnyxGateway gateway;
-    private final List<OnyxListenerAdapter> listeners;
-    private final CompletableFuture<OnyxClient> ready;
-    private final AtomicBoolean started;
+	private final OnyxRestClient rest;
+	private final OnyxGateway gateway;
+	private final List<OnyxListenerAdapter> listeners;
+	private final CompletableFuture<OnyxClient> ready;
+	private final AtomicBoolean started;
+	private final CommandRegistry commandRegistry;
+	private final InteractionAutoDefer autoDefer = new InteractionAutoDefer(2500);
 
-    private volatile boolean connected;
-    private volatile boolean everReady;
-    private volatile boolean shuttingDown;
+	private volatile boolean connected;
+	private volatile boolean everReady;
+	private volatile boolean shuttingDown;
 
-    OnyxClient(
-            String token,
-            String baseUrl,
-            List<OnyxListenerAdapter> listeners
-    ) {
-        this.rest = new OnyxRestClient(token, baseUrl);
-        this.listeners = new CopyOnWriteArrayList<>(listeners);
-        this.ready = new CompletableFuture<>();
-        this.started = new AtomicBoolean();
+	OnyxClient(String token, String baseUrl, List<OnyxListenerAdapter> listeners)
+	{
+		this.rest = new OnyxRestClient(token, baseUrl);
+		this.commandRegistry = new CommandRegistry(rest);
+		this.listeners = new CopyOnWriteArrayList<>(listeners);
+		this.ready = new CompletableFuture<>();
+		this.started = new AtomicBoolean();
 
-        this.gateway = new OnyxGateway(
-                baseUrl,
-                token,
-                this::handleReady,
-                this::handleGatewayEvent,
-                this::handleInteraction,
-                this::handleDisconnect,
-                this::handleError
-        );
-    }
+		this.gateway = new OnyxGateway(baseUrl, token, this::handleReady, this::handleGatewayEvent,
+				this::handleInteraction, this::handleDisconnect, this::handleError);
+	}
 
-    public void connect() {
-        if (!started.compareAndSet(false, true)) {
-            return;
-        }
+	public void connect()
+	{
+		if (!started.compareAndSet(false, true))
+		{
+			return;
+		}
 
-        rest.get("/apps/@me").whenComplete((result, error) -> {
-            if (error != null) {
-                ready.completeExceptionally(error);
-                handleError(error);
-                return;
-            }
+		rest.get("/apps/@me").thenCompose(result -> commandRegistry.syncIfEnabled()).whenComplete((result, error) ->
+		{
+			if (error != null)
+			{
+				ready.completeExceptionally(error);
+				handleError(error);
+				return;
+			}
 
-            try {
-                gateway.connect();
-            } catch (Exception exception) {
-                ready.completeExceptionally(exception);
-                handleError(exception);
-            }
-        });
-    }
+			try
+			{
+				gateway.connect();
+			} catch (Exception exception)
+			{
+				ready.completeExceptionally(exception);
+				handleError(exception);
+			}
+		});
+	}
 
-    private void handleReady(JsonObject data) {
-        if (shuttingDown) {
-            return;
-        }
+	private void handleReady(JsonObject data)
+	{
+		if (shuttingDown)
+		{
+			return;
+		}
 
-        boolean reconnect = everReady;
-        everReady = true;
-        connected = true;
+		boolean reconnect = everReady;
+		everReady = true;
+		connected = true;
 
-        ReadyEvent event = new ReadyEvent(this, reconnect, data);
+		ReadyEvent event = new ReadyEvent(this, reconnect, data);
 
-        ready.complete(this);
-        dispatch(listener -> listener.onReady(event));
-    }
+		ready.complete(this);
+		dispatch(listener -> listener.onReady(event));
+	}
 
-    private void handleGatewayEvent(JsonObject payload) {
-        if (shuttingDown || !payload.has("type")) {
-            return;
-        }
+	private void handleGatewayEvent(JsonObject payload)
+	{
+		if (shuttingDown || !payload.has("type"))
+		{
+			return;
+		}
 
-        GatewayEvent event = new GatewayEvent(this, payload);
-        String type = event.getType();
+		GatewayEvent event = new GatewayEvent(this, payload);
+		String type = event.getType();
 
-        dispatch(listener -> listener.onGatewayEvent(event));
+		dispatch(listener -> listener.onGatewayEvent(event));
 
-        if (type == null) {
-            return;
-        }
+		if (type == null)
+		{
+			return;
+		}
 
-        switch (type) {
-            case "message.created" -> {
-                MessageReceivedEvent messageEvent =
-                        new MessageReceivedEvent(this, payload);
+		switch (type)
+		{
+		case "message.created" ->
+		{
+			MessageReceivedEvent messageEvent = new MessageReceivedEvent(this, payload);
 
-                dispatch(listener ->
-                        listener.onMessageReceived(messageEvent));
-            }
+			dispatch(listener -> listener.onMessageReceived(messageEvent));
+		}
 
-            case "member.joined" -> {
-                MemberJoinEvent memberEvent =
-                        new MemberJoinEvent(this, payload);
+		case "member.joined" ->
+		{
+			MemberJoinEvent memberEvent = new MemberJoinEvent(this, payload);
 
-                dispatch(listener ->
-                        listener.onMemberJoin(memberEvent));
-            }
+			dispatch(listener -> listener.onMemberJoin(memberEvent));
+		}
 
-            default -> {
-            }
-        }
-    }
+		default ->
+		{
+		}
+		}
+	}
 
+	private void handleInteraction(JsonObject payload)
+	{
+		if (shuttingDown)
+			return;
 
-    private void handleInteraction(JsonObject payload) {
-        if (shuttingDown) {
-            return;
-        }
+		if (!payload.has("type") || payload.get("type").isJsonNull())
+			return;
 
-        if (!payload.has("type") || payload.get("type").isJsonNull()) {
-            return;
-        }
+		String type = payload.get("type").getAsString();
 
-        String type = payload.get("type").getAsString();
+		switch (type)
+		{
+		case "component" ->
+		{
+			ComponentInteractionEvent event = new ComponentInteractionEvent(this, payload);
 
-        switch (type) {
-        case "component" -> {
-            ComponentInteractionEvent event =
-                    new ComponentInteractionEvent(this, payload);
-
-            dispatch(listener ->
-                    listener.onComponentInteraction(event));
-        }
-
-        case "modal" -> {
-            ModalInteractionEvent event =
-                    new ModalInteractionEvent(this, payload);
-
-            dispatch(listener ->
-                    listener.onModalInteraction(event));
-        }
-
-        case "command" -> {
-            if (!payload.has("command")
-                    || !payload.get("command").isJsonObject()) {
-                return;
-            }
-
-            JsonObject command = payload.getAsJsonObject("command");
-
-            if (command.has("type")
-                    && !command.get("type").getAsString().equals("slash")) {
-                return;
-            }
-
-            SlashCommandInteractionEvent event =
-                    new SlashCommandInteractionEvent(this, payload);
-
-            dispatch(listener ->
-                    listener.onSlashCommandInteraction(event));
-        }
-
-        case "autocomplete" -> {
-            AutocompleteInteractionEvent event =
-                    new AutocompleteInteractionEvent(this, payload);
-
-            dispatch(listener ->
-                    listener.onAutocompleteInteraction(event));
-        }
-
-        default -> {
-        }
-        }
-    }
+			autoDefer.schedule(
+					event::isAcknowledged,
+					() -> event.deferReply().queue(),
+					this::handleError
+			);
 
 
-    private void handleDisconnect(String reason) {
-        connected = false;
+			dispatch(listener -> listener.onComponentInteraction(event));
+		}
 
-        if (!shuttingDown) {
-            dispatch(listener -> listener.onDisconnect(reason));
-        }
-    }
+		case "modal" ->
+		{
+			ModalInteractionEvent event = new ModalInteractionEvent(this, payload);
 
-    private void handleError(Throwable error) {
-        for (OnyxListenerAdapter listener : listeners) {
-            try {
-                listener.onError(error);
-            } catch (Exception exception) {
-                exception.printStackTrace();
-            }
-        }
-    }
+			autoDefer.schedule(
+					event::isAcknowledged,
+					() -> event.deferReply().queue(),
+					this::handleError
+			);
 
-    private void dispatch(Consumer<OnyxListenerAdapter> action) {
-        for (OnyxListenerAdapter listener : listeners) {
-            try {
-                action.accept(listener);
-            } catch (Exception exception) {
-                handleError(exception);
-            }
-        }
-    }
+			dispatch(listener -> listener.onModalInteraction(event));
+		}
 
-    public OnyxClient awaitReady() {
-        return ready.join();
-    }
+		case "command" ->
+		{
+			if (!payload.has("command") || !payload.get("command").isJsonObject())
+				return;
 
-    public CompletableFuture<OnyxClient> getReadyFuture() {
-        return ready;
-    }
+			JsonObject command = payload.getAsJsonObject("command");
 
-    public boolean isConnected() {
-        return connected;
-    }
+			if (command.has("type") && !command.get("type").getAsString().equals("slash"))
+				return;
 
-    public void addEventListener(OnyxListenerAdapter listener) {
-        listeners.add(listener);
-    }
+			SlashCommandInteractionEvent event = new SlashCommandInteractionEvent(this, payload);
 
-    public TextChannel getTextChannelById(String channelId) {
-        return new TextChannel(this, channelId);
-    }
+			autoDefer.schedule(
+					event::isAcknowledged,
+					() -> event.deferReply().queue(),
+					this::handleError
+			);
 
-    public VoiceChannel getVoiceChannelById(String channelId) {
-        return new VoiceChannel(this, channelId);
-    }
+			dispatch(listener -> listener.onSlashCommandInteraction(event));
+		}
 
-    public RestAction<Server> retrieveServerById(String serverId) {
-        EntityJson.encode(serverId);
-        return new RestAction<>(() ->
-                rest.get("/servers/" + EntityJson.encode(serverId))
-                        .thenApply(response -> new Server(this, EntityJson.requireObject(response)))
-        );
-    }
+		case "autocomplete" ->
+		{
+			AutocompleteInteractionEvent event = new AutocompleteInteractionEvent(this, payload);
 
-    public RestAction<ServerChannel> retrieveChannelById(String channelId) {
-        EntityJson.encode(channelId);
-        return new RestAction<>(() ->
-                rest.get("/channels/" + EntityJson.encode(channelId))
-                        .thenApply(response -> {
-                            JsonObject data = EntityJson.requireObject(response);
-                            String type = EntityJson.string(data, "type");
-                            if ("text".equals(type)) {
-                                return new TextChannel(this, data);
-                            }
-                            if ("voice".equals(type)) {
-                                return new VoiceChannel(this, data);
-                            }
-                            throw new IllegalStateException("Unknown Onyx channel type: " + type);
-                        })
-        );
-    }
+			autoDefer.schedule(
+					event::isAcknowledged,
+					() -> event.deferReply().queue(),
+					this::handleError
+			);
 
-    public RestAction<JsonElement> sendMessage(
-            String channelId,
-            String content
-    ) {
-        return new RestAction<>(() -> {
-            JsonObject payload = new JsonObject();
-            payload.addProperty("content", content);
+			dispatch(listener -> listener.onAutocompleteInteraction(event));
+		}
 
-            return rest.post(
-                    "/channels/" + channelId + "/messages",
-                    payload
-            );
-        });
-    }
+		default ->
+		{
+		}
+		}
+	}
 
-    public CommandUpdateAction updateCommands() {
-        return new CommandUpdateAction(this);
-    }
+	private void handleDisconnect(String reason)
+	{
+		connected = false;
 
-    public OnyxRestClient getRestClient() {
-        return rest;
-    }
+		if (!shuttingDown)
+			dispatch(listener -> listener.onDisconnect(reason));
+	}
 
-    public void shutdown() {
-        shuttingDown = true;
-        connected = false;
-        started.set(false);
+	private void handleError(Throwable error)
+	{
+		for (OnyxListenerAdapter listener : listeners)
+		{
+			try
+			{
+				listener.onError(error);
+			} catch (Exception exception)
+			{
+				exception.printStackTrace();
+			}
+		}
+	}
 
-        if (!ready.isDone()) {
-            ready.completeExceptionally(
-                    new IllegalStateException("Client was shut down")
-            );
-        }
+	private void dispatch(Consumer<OnyxListenerAdapter> action)
+	{
+		for (OnyxListenerAdapter listener : listeners)
+		{
+			try
+			{
+				action.accept(listener);
+			} catch (Exception exception)
+			{
+				handleError(exception);
+			}
+		}
+	}
 
-        gateway.disconnect();
-    }
+	public OnyxClient awaitReady()
+	{
+		return ready.join();
+	}
+
+	public CompletableFuture<OnyxClient> getReadyFuture()
+	{
+		return ready;
+	}
+
+	public boolean isConnected()
+	{
+		return connected;
+	}
+
+	public void addEventListener(OnyxListenerAdapter listener)
+	{
+		listeners.add(listener);
+	}
+
+	public TextChannel getTextChannelById(String channelId)
+	{
+		return new TextChannel(this, channelId);
+	}
+
+	public VoiceChannel getVoiceChannelById(String channelId)
+	{
+		return new VoiceChannel(this, channelId);
+	}
+
+	public RestAction<Server> retrieveServerById(String serverId)
+	{
+		EntityJson.encode(serverId);
+		return new RestAction<>(() -> rest.get("/servers/" + EntityJson.encode(serverId))
+				.thenApply(response -> new Server(this, EntityJson.requireObject(response))));
+	}
+
+	public RestAction<ServerChannel> retrieveChannelById(String channelId)
+	{
+		EntityJson.encode(channelId);
+		return new RestAction<>(() -> rest.get("/channels/" + EntityJson.encode(channelId)).thenApply(response ->
+		{
+			JsonObject data = EntityJson.requireObject(response);
+			String type = EntityJson.string(data, "type");
+			if ("text".equals(type))
+				return new TextChannel(this, data);
+			if ("voice".equals(type))
+				return new VoiceChannel(this, data);
+			throw new IllegalStateException("Unknown Onyx channel type: " + type);
+		}));
+	}
+
+	public RestAction<JsonElement> sendMessage(String channelId, String content)
+	{
+		return new RestAction<>(() ->
+		{
+			JsonObject payload = new JsonObject();
+			payload.addProperty("content", content);
+
+			return rest.post("/channels/" + channelId + "/messages", payload);
+		});
+	}
+
+	public CommandUpdateAction updateCommands()
+	{
+		return new CommandUpdateAction(this);
+	}
+
+	public OnyxRestClient getRestClient()
+	{
+		return rest;
+	}
+
+	public void shutdown()
+	{
+		shuttingDown = true;
+		connected = false;
+		started.set(false);
+
+		if (!ready.isDone())
+		{
+			ready.completeExceptionally(new IllegalStateException("Client was shut down"));
+		}
+
+		gateway.disconnect();
+		autoDefer.close();
+	}
+
+	public CommandRegistry getCommandRegistry()
+	{
+		return commandRegistry;
+	}
+
 }

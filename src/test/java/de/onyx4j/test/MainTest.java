@@ -36,14 +36,22 @@ public final class MainTest
 
 	private static final long STARTED_AT = System.nanoTime();
 
-	public static void main(String[] args) throws InterruptedException
+	static void main(String[] args) throws InterruptedException
 	{
 		String token = loadToken();
 
 		if (token == null || token.isBlank())
 			throw new IllegalStateException("ONYX_BOT_TOKEN is missing");
 
-		OnyxClient client = OnyxClientBuilder.createDefault(token).addEventListeners(new OnyxListenerAdapter()
+		OnyxClient client = OnyxClientBuilder.createDefault(token)
+				.addCommands(Commands.slash("ping", "Test the Onyx4J gateway connection"),
+						Commands.slash("about", "Display information about the Onyx4J SDK"),
+						Commands.slash("status", "Display the current showcase bot status"),
+						Commands.slash("whoami", "Display your Onyx account information"),
+						Commands.slash("language", "Choose your programming language").addOptions(
+								CommandOptionData.string("name", "Programming language").setRequired(true)
+										.setAutocomplete(true)))
+				.addEventListeners(new OnyxListenerAdapter()
 		{
 			@Override
 			public void onReady(ReadyEvent event)
@@ -107,21 +115,6 @@ public final class MainTest
 		Runtime.getRuntime().addShutdownHook(new Thread(client::shutdown));
 
 		client.awaitReady();
-
-		client.updateCommands().addCommands(Commands.slash("ping", "Test the Onyx4J gateway connection"),
-						Commands.slash("about", "Display information about the Onyx4J SDK"),
-						Commands.slash("status", "Display the current showcase bot status"),
-						Commands.slash("whoami", "Display your Onyx account information"),
-						Commands.slash("language", "Choose your programming language").addOptions(
-								CommandOptionData.string("name", "Programming language").setRequired(true)
-										.setAutocomplete(true))).submit()
-				.queue(result -> System.out.println("Slash commands registered successfully"), error ->
-				{
-					System.err.println("Command registration failed");
-					error.printStackTrace();
-				});
-
-		new CountDownLatch(1).await();
 	}
 
 	private static String loadToken()
