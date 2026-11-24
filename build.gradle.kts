@@ -1,6 +1,10 @@
+import java.util.Locale
+import java.util.zip.ZipFile
+
 plugins {
     `java-library`
     `maven-publish`
+    id("com.gradleup.shadow") version "9.4.3"
 }
 
 java {
@@ -30,6 +34,63 @@ tasks.withType<Jar>().configureEach {
     from(rootProject.file("LICENSE")) {
         into("META-INF")
     }
+}
+
+shadow {
+    addShadowVariantIntoJavaComponent = false
+}
+
+val dependencyNotices = layout.buildDirectory.dir("dependency-notices")
+val runtimeLibraries = configurations.runtimeClasspath
+
+val collectDependencyNotices by tasks.registering {
+    inputs.files(runtimeLibraries)
+    outputs.dir(dependencyNotices)
+    doLast {
+        val target = dependencyNotices.get().asFile
+        target.deleteRecursively()
+        target.mkdirs()
+
+        val inventory = mutableListOf<String>()
+        runtimeLibraries.get().files.filter { it.isFile && it.extension.equals("jar", true) }.sortedBy { it.name }.forEach { library ->
+            val notices = mutableListOf<String>()
+            val libraryDir = target.resolve(library.nameWithoutExtension)
+            ZipFile(library).use { archive ->
+                archive.entries().asSequence().filterNot { it.isDirectory }.forEach { entry ->
+                    val normalized = entry.name.lowercase(Locale.ROOT)
+                    val filename = normalized.substringAfterLast('/')
+                    if (filename.startsWith("license") || filename.startsWith("licence") || filename.startsWith("notice") || filename.startsWith("copyright") || filename.startsWith("copying") || filename.startsWith("third-party") || filename.startsWith("third_party") || filename == "dependencies" || normalized.startsWith("meta-inf/licenses/")) {
+                        val output = libraryDir.resolve(entry.name).normalize()
+                        require(output.toPath().startsWith(libraryDir.toPath())) { "Invalid notice path in ${library.name}" }
+                        output.parentFile.mkdirs()
+                        archive.getInputStream(entry).use { input ->
+                            output.outputStream().use { input.copyTo(it) }
+                        }
+                        notices.add(entry.name)
+                    }
+                }
+            }
+            inventory.add(library.name + ": " + if (notices.isEmpty()) "No embedded notices found; refer to upstream distribution and license metadata." else notices.sorted().joinToString(", "))
+        }
+        require(inventory.isNotEmpty()) { "No runtime dependencies resolved" }
+        target.resolve("DEPENDENCIES.txt").writeText(inventory.joinToString("\n", postfix = "\n"), Charsets.UTF_8)
+    }
+}
+
+tasks.shadowJar {
+    archiveClassifier.set("withDependencies")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    filesMatching("META-INF/services/**") {
+        duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    }
+    mergeServiceFiles()
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/*.EC", "META-INF/INDEX.LIST", "module-info.class", "META-INF/versions/**/module-info.class")
+    dependsOn(collectDependencyNotices)
+    from(dependencyNotices.map { it.asFile }) {
+        into("META-INF/third-party")
+    }
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
 }
 
 tasks.test {

@@ -1,0 +1,101 @@
+name: RC2 release assets
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/rc2-assets.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc2-release-assets
+  cancel-in-progress: false
+
+jobs:
+  download:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch original published artifacts
+        run: |
+          set -euo pipefail
+          mkdir release-dist
+          cd release-dist
+          prefix=onyx4j-1.0.0-RC2
+          base="https://repo.onyx4j.de/releases/de/onyx4j/onyx4j/1.0.0-RC2"
+          for suffix in .jar -sources.jar -javadoc.jar .pom; do
+            file="$prefix$suffix"
+            curl --fail --silent --show-error --proto '=https' --max-time 120 --retry 2 "$base/$file" -o "$file"
+            if curl --fail --silent --show-error --proto '=https' --max-time 30 "$base/$file.sha256" -o "$file.sha256"; then
+              expected="$(awk 'NR==1 {print $1}' "$file.sha256")"
+              [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]]
+              printf '%s  %s\n' "$expected" "$file" | sha256sum -c -
+              rm "$file.sha256"
+            else
+              rm -f "$file.sha256"
+              echo "::notice::No upstream SHA-256 available for $file; generated checksum records downloaded bytes."
+            fi
+          done
+          python3 - <<'PY'
+          import pathlib
+          import zipfile
+          import xml.etree.ElementTree as ET
+          prefix = "onyx4j-1.0.0-RC2"
+          for path in pathlib.Path(".").glob("*.jar"):
+              with zipfile.ZipFile(path) as archive:
+                  assert archive.testzip() is None, path
+                  entries = archive.namelist()
+                  if path.name.endswith("-sources.jar"):
+                      assert any(x.endswith(".java") for x in entries)
+                  elif path.name.endswith("-javadoc.jar"):
+                      assert any(x.endswith(".html") for x in entries)
+                  else:
+                      assert "de/onyx4j/api/OnyxClient.class" in entries
+          ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+          pom = ET.parse(prefix + ".pom")
+          for key, value in {"groupId":"de.onyx4j", "artifactId":"onyx4j", "version":"1.0.0-RC2"}.items():
+              assert pom.findtext("m:" + key, namespaces=ns) == value
+          PY
+          sha256sum *.jar *.pom > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-rc2-assets
+          path: release-dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  attach:
+    needs: download
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: original-rc2-assets
+          path: release-dist
+      - name: Attach original files without replacing assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag=v1.0.0-RC2
+          gh release view "$tag" --json isDraft,isPrerelease,tagName --jq 'select(.isDraft == false and .isPrerelease == true and .tagName == "v1.0.0-RC2") | .tagName' | grep -Fx "$tag"
+          (cd release-dist && sha256sum -c SHA256SUMS)
+          existing="$(gh release view "$tag" --json assets --jq '.assets[].name')"
+          mkdir existing-assets
+          for path in release-dist/*; do
+            file="${path##*/}"
+            if grep -Fxq "$file" <<< "$existing"; then
+              gh release download "$tag" --pattern "$file" --dir existing-assets
+              cmp "$path" "existing-assets/$file"
+            else
+              gh release upload "$tag" "$path"
+            fi
+          done

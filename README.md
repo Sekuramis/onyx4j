@@ -204,7 +204,7 @@ The smoke test checks authentication, gateway readiness, installed servers and r
 
 ## Releases
 
-Browse [GitHub Releases](https://github.com/Sekuramis/onyx4j/releases) and the [changelog](CHANGELOG.md). Release candidates are marked as pre-releases. See the [release process](RELEASING.md) for maintainer instructions.
+Browse [GitHub Releases](https://github.com/Sekuramis/onyx4j/releases) and the [changelog](CHANGELOG.md). Release candidates are marked as pre-releases. Future releases include a `withDependencies` JAR for manual classpath use alongside the standard library, sources and JavaDocs. Use the regular artifact for Maven and Gradle projects. See the [release process](RELEASING.md) for maintainer instructions.
 
 ## Release roadmap
 
