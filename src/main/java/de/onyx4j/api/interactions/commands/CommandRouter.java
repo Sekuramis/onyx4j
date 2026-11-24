@@ -21,6 +21,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
+import de.onyx4j.api.interactions.commands.middleware.CommandMiddleware;
+import de.onyx4j.api.interactions.commands.middleware.CommandExceptionHandler;
+import de.onyx4j.api.interactions.commands.middleware.PreconditionResult;
 /**
  * © Copyright 24.11.2026 - 01:06 – Urheberrechtshinweis Alle Inhalte dieser Software, insbesondere der Quellcode, sind
  * urheberrechtlich geschützt. Das Urheberrecht liegt, soweit nicht ausdrücklich anders gekennzeichnet, bei @author
@@ -34,6 +37,8 @@ public final class CommandRouter {
 	private final CommandRegistry registry;
 	private final Consumer<Throwable> errorHandler;
 	private volatile Map<String, Handler> handlers = Map.of();
+	private volatile Set<String> botOwnerIds = Set.of();
+	private volatile CommandExceptionHandler exceptionHandler;
 
 	public CommandRouter(CommandRegistry registry) {
 		this(registry, Throwable::printStackTrace);
@@ -42,6 +47,20 @@ public final class CommandRouter {
 	public CommandRouter(CommandRegistry registry, Consumer<Throwable> errorHandler) {
 		this.registry = Objects.requireNonNull(registry, "registry");
 		this.errorHandler = Objects.requireNonNull(errorHandler, "errorHandler");
+	}
+
+	public CommandRouter setBotOwnerIds(String... ids) {
+		Objects.requireNonNull(ids, "ids");
+		for (String id : ids) {
+			if (id == null || id.isBlank()) throw new IllegalArgumentException("Bot owner ID must not be blank");
+		}
+		botOwnerIds = Set.copyOf(Arrays.asList(ids));
+		return this;
+	}
+
+	public CommandRouter setExceptionHandler(CommandExceptionHandler handler) {
+		exceptionHandler = Objects.requireNonNull(handler, "handler");
+		return this;
 	}
 
 	public synchronized CommandRouter registerHandlers(Object... instances) {
@@ -89,36 +108,79 @@ public final class CommandRouter {
 	public boolean dispatch(SlashCommandInteractionEvent event) {
 		Objects.requireNonNull(event, "event");
 		Handler handler = handlers.get(event.getName());
-		if (handler == null) {
-			return false;
+		if (handler == null) return false;
+
+		try {
+			PreconditionResult owner = handler.middleware().checkOwner(event, botOwnerIds);
+			if (!owner.allowed()) {
+				deny(event, owner.message());
+				return true;
+			}
+		} catch (RuntimeException exception) {
+			report(event, exception, true);
+			return true;
 		}
+
 		if (!handler.access().isProtected()) {
-			handler.invoke(event);
+			execute(handler, event, true);
 			return true;
 		}
 
 		try {
 			handler.access().authorize(event).whenComplete((allowed, error) -> {
-				try {
-					if (error != null) {
-						deny(event, "Unable to verify your permissions.");
-						errorHandler.accept(error);
-						return;
-					}
-					if (!Boolean.TRUE.equals(allowed)) {
-						deny(event, "You do not have permission to use this command here.");
-						return;
-					}
-					handler.invoke(event);
-				} catch (Exception exception) {
-					errorHandler.accept(exception);
+				if (error != null) {
+					deny(event, "Unable to verify your permissions.");
+					errorHandler.accept(error);
+					return;
 				}
+				if (!Boolean.TRUE.equals(allowed)) {
+					deny(event, "You do not have permission to use this command here.");
+					return;
+				}
+				execute(handler, event, false);
+			}).exceptionally(error -> {
+				errorHandler.accept(error);
+				return null;
 			});
-		} catch (Exception exception) {
+		} catch (RuntimeException exception) {
 			deny(event, "Unable to verify your permissions.");
 			errorHandler.accept(exception);
 		}
 		return true;
+	}
+
+	private void execute(Handler handler, SlashCommandInteractionEvent event, boolean synchronous) {
+		try {
+			Object[] arguments = handler.resolve(event);
+			PreconditionResult check = handler.middleware().check(event);
+			if (!check.allowed()) {
+				deny(event, check.message());
+				return;
+			}
+			PreconditionResult cooldown = handler.middleware().acquire(event);
+			if (!cooldown.allowed()) {
+				deny(event, cooldown.message());
+				return;
+			}
+			handler.invoke(arguments);
+		} catch (RuntimeException exception) {
+			report(event, exception, synchronous);
+		}
+	}
+
+	private void report(SlashCommandInteractionEvent event, RuntimeException error, boolean synchronous) {
+		CommandExceptionHandler handler = exceptionHandler;
+		if (handler == null) {
+			if (synchronous) throw error;
+			errorHandler.accept(error);
+			return;
+		}
+		errorHandler.accept(error);
+		try {
+			handler.onException(event, error);
+		} catch (RuntimeException exception) {
+			errorHandler.accept(exception);
+		}
 	}
 
 	private void deny(SlashCommandInteractionEvent event, String message) {
@@ -176,7 +238,7 @@ public final class CommandRouter {
 		}
 		required.addAll(optional);
 		definition = definition.addOptions(required.toArray(CommandOptionData[]::new));
-		return new Handler(instance, method, definition, List.copyOf(bindings), CommandAccess.from(method));
+		return new Handler(instance, method, definition, List.copyOf(bindings), CommandAccess.from(method), CommandMiddleware.from(method));
 	}
 
 	private static CommandOptionType optionType(Class<?> type, Method method) {
@@ -223,13 +285,17 @@ public final class CommandRouter {
 		}
 	}
 
-	private record Handler(Object instance, Method method, SlashCommandData definition, List<Binding> bindings, CommandAccess access) {
-		void invoke(SlashCommandInteractionEvent event) {
+	private record Handler(Object instance, Method method, SlashCommandData definition, List<Binding> bindings, CommandAccess access, CommandMiddleware middleware) {
+		Object[] resolve(SlashCommandInteractionEvent event) {
 			JsonObject options = event.getOptions();
 			Object[] arguments = new Object[bindings.size()];
 			for (int i = 0; i < arguments.length; i++) {
 				arguments[i] = bindings.get(i).resolve(event, options);
 			}
+			return arguments;
+		}
+
+		void invoke(Object[] arguments) {
 			try {
 				method.invoke(instance, arguments);
 			} catch (InvocationTargetException exception) {

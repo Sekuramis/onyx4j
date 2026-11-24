@@ -64,7 +64,7 @@ public final class OnyxRestClient {
                 .timeout(Duration.ofSeconds(15))
                 .header("Accept", "application/json")
                 .header("Authorization", "Bot " + token)
-                .header("User-Agent", "onyx4j/0.11.0");
+                .header("User-Agent", "onyx4j/0.12.0");
 
         if (body != null) {
             builder.header("Content-Type", "application/json");

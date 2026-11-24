@@ -21,6 +21,11 @@ import de.onyx4j.api.interactions.commands.annotation.CommandOption;
 import de.onyx4j.api.interactions.commands.annotation.SlashCommand;
 import de.onyx4j.api.interactions.commands.annotation.RequirePermissions;
 import de.onyx4j.api.interactions.commands.annotation.ServerOnly;
+import de.onyx4j.api.interactions.commands.annotation.BotOwnerOnly;
+import de.onyx4j.api.interactions.commands.annotation.Cooldown;
+import de.onyx4j.api.interactions.commands.annotation.RequirePreconditions;
+import de.onyx4j.api.interactions.commands.middleware.CommandPrecondition;
+import de.onyx4j.api.interactions.commands.middleware.PreconditionResult;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.InputStream;
@@ -46,11 +51,13 @@ public final class MainTest extends OnyxListenerAdapter {
 	public static void main(String[] args) throws Exception {
 
 		MainTest handler = new MainTest();
+		String ownerId = System.getenv("ONYX_BOT_OWNER_ID");
 
 		OnyxClient client = OnyxClientBuilder
 				.createDefault(loadToken())
 				.addEventListeners(handler)
 				.addCommandHandlers(handler)
+				.setBotOwnerIds(ownerId == null || ownerId.isBlank() ? new String[0] : new String[]{ownerId})
 				.addInteractionHandlers(handler)
 				.setAutoSyncCommands(true)
 				.build();
@@ -64,7 +71,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 	@Override
 	public void onReady(ReadyEvent event) {
-		System.out.println("Onyx4J 0.11.0 connected!");
+		System.out.println("Onyx4J 0.12.0 connected!");
 		System.out.println(
 				"Registered commands: " +
 						event.getClient()
@@ -103,7 +110,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	)
 	public void about(SlashCommandInteractionEvent event) {
 		event.reply("""
-                Onyx4J 0.11.0-SNAPSHOT
+                Onyx4J 0.12.0-SNAPSHOT
                 The Java API for Onyx
                 Java 25
                 Annotation Command Framework
@@ -124,7 +131,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 		event.reply("""
                 Status: Online
-                API Version: 0.11.0-SNAPSHOT
+                API Version: 0.12.0-SNAPSHOT
                 Java Version: %s
                 Uptime: %dh %dm %ds
                 """.formatted(
@@ -206,7 +213,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	@Override
 	public void onMessageReceived(MessageReceivedEvent event) {
 		if (event.getMessage().isAuthorBot() || !"!interactions".equals(event.getMessage().getContentRaw())) return;
-		event.getChannel().sendMessage(Components.message("Onyx4J 0.11.0 Interaction Showcase",
+		event.getChannel().sendMessage(Components.message("Onyx4J 0.12.0 Interaction Showcase",
 				Components.row(
 						Components.primary("demo:ping", "Ping"),
 						Components.secondary("demo:ticket:42", "Ticket 42"),
@@ -276,6 +283,38 @@ public final class MainTest extends OnyxListenerAdapter {
 	@ServerOnly
 	public void serverCheck(SlashCommandInteractionEvent event) {
 		event.replyEphemeral("Server ID: " + event.getServerId()).queue(result -> {}, this::onError);
+	}
+
+	@SlashCommand(name = "cooldowncheck", description = "Test command cooldown")
+	@Cooldown(seconds = 10)
+	public void cooldownCheck(SlashCommandInteractionEvent event) {
+		event.replyEphemeral("Cooldown started: 10 seconds.").queue(result -> {}, this::onError);
+	}
+
+	@SlashCommand(name = "ownercheck", description = "Test bot owner access")
+	@BotOwnerOnly
+	public void ownerCheck(SlashCommandInteractionEvent event) {
+		event.replyEphemeral("Bot owner access granted.").queue(result -> {}, this::onError);
+	}
+
+	@SlashCommand(name = "preconditioncheck", description = "Test custom command preconditions")
+	@RequirePreconditions(ServerContext.class)
+	public void preconditionCheck(SlashCommandInteractionEvent event) {
+		event.replyEphemeral("Precondition passed.").queue(result -> {}, this::onError);
+	}
+
+	@SlashCommand(name = "errorcheck", description = "Test central exception handling")
+	public void errorCheck(SlashCommandInteractionEvent event) {
+		throw new IllegalStateException("Intentional middleware showcase error");
+	}
+
+	public static final class ServerContext implements CommandPrecondition {
+		@Override
+		public PreconditionResult check(SlashCommandInteractionEvent event) {
+			return event.getServerId() == null || event.getServerId().isBlank()
+					? PreconditionResult.deny("A server context is required.")
+					: PreconditionResult.allow();
+		}
 	}
 
 	private static String loadToken() throws Exception {

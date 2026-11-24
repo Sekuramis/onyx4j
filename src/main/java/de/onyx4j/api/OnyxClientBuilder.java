@@ -4,6 +4,7 @@ import de.onyx4j.api.events.GatewayEvent;
 import de.onyx4j.api.events.OnyxListenerAdapter;
 import de.onyx4j.api.events.gateway.GatewayEventBus;
 import de.onyx4j.api.interactions.commands.SlashCommandData;
+import de.onyx4j.api.interactions.commands.middleware.CommandExceptionHandler;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -31,6 +32,8 @@ public final class OnyxClientBuilder
 	private final List<OnyxListenerAdapter> listeners = new ArrayList<>();
 	private final List<Object> commandHandlers = new ArrayList<>();
 	private final List<Object> interactionHandlers = new ArrayList<>();
+	private List<String> botOwnerIds = List.of();
+	private CommandExceptionHandler commandExceptionHandler;
 
 	private OnyxClientBuilder(String token)
 	{
@@ -70,6 +73,8 @@ public final class OnyxClientBuilder
 				.addCommands(registeredCommands.toArray(SlashCommandData[]::new))
 				.setAutoSync(autoSyncCommands);
 
+		client.getCommandRouter().setBotOwnerIds(botOwnerIds.toArray(String[]::new));
+		if (commandExceptionHandler != null) client.getCommandRouter().setExceptionHandler(commandExceptionHandler);
 		client.getCommandRouter().registerHandlers(commandHandlers.toArray());
 		client.getInteractionRouter().registerHandlers(interactionHandlers.toArray());
 		client.connect();
@@ -105,6 +110,18 @@ public final class OnyxClientBuilder
 
 	public OnyxClientBuilder addInteractionHandlers(Object... handlers) {
 		interactionHandlers.addAll(List.of(handlers));
+		return this;
+	}
+
+	public OnyxClientBuilder setBotOwnerIds(String... ids) {
+		botOwnerIds = List.of(ids);
+		if (botOwnerIds.stream().anyMatch(String::isBlank))
+			throw new IllegalArgumentException("Bot owner ID must not be blank");
+		return this;
+	}
+
+	public OnyxClientBuilder setCommandExceptionHandler(CommandExceptionHandler handler) {
+		commandExceptionHandler = Objects.requireNonNull(handler, "handler");
 		return this;
 	}
 

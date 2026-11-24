@@ -74,6 +74,8 @@ public final class OnyxClient
 		this.rest = new OnyxRestClient(token, baseUrl);
 		this.commandRegistry = new CommandRegistry(rest);
 		this.commandRouter = new CommandRouter(commandRegistry, this::handleError);
+		this.commandRouter.setExceptionHandler((event, error) -> event.replyEphemeral("Command execution failed.")
+				.queue(result -> {}, this::handleError));
 		this.listeners = new CopyOnWriteArrayList<>(listeners);
 		this.ready = new CompletableFuture<>();
 		this.started = new AtomicBoolean();
