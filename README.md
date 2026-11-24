@@ -8,6 +8,7 @@
   <img src="https://img.shields.io/badge/Java-25+-9b8acb?style=for-the-badge&logo=openjdk&logoColor=white&labelColor=15151c" alt="Java 25+" />
   <img src="https://img.shields.io/badge/Platform-Onyx-aaa5bd?style=for-the-badge&labelColor=15151c" alt="Onyx" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-a78bfa?style=for-the-badge&labelColor=15151c" alt="License Apache 2.0" /></a>
+  <a href="https://github.com/Sekuramis/onyx4j/actions/workflows/ci.yml"><img src="https://github.com/Sekuramis/onyx4j/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
 
   <h3>Build. Connect. Extend.</h3>
   <p>An independent, developer-first Java API for building applications, bots and integrations for Onyx.</p>
@@ -170,16 +171,16 @@ Use `map()` and `flatMap()` to compose actions. Avoid blocking calls such as `co
 
 ## Building from source
 
-For maintainers and developers with repository access, use the Gradle wrapper with JDK 25.
+Use JDK 25 and Gradle 9.1 or newer.
 
 ```bash
-./gradlew clean build
+gradle clean build
 ```
 
 On Windows:
 
 ```powershell
-.\gradlew.bat clean build
+gradle clean build
 ```
 
 The build generates the library, sources and JavaDoc JARs in `build/libs/`.
@@ -189,13 +190,13 @@ The build generates the library, sources and JavaDoc JARs in `build/libs/`.
 RC2 passed 66 local automated tests, including a WebSocket/Engine.IO/Socket.IO fixture covering authentication payloads, heartbeat, event delivery and server-initiated reconnection.
 
 ```bash
-./gradlew test
+gradle test
 ```
 
 For an opt-in live smoke test, set `ONYX_BOT_TOKEN` locally and run:
 
 ```bash
-./gradlew liveSmoke
+gradle liveSmoke
 ```
 
 The smoke test checks authentication, gateway readiness, installed servers and registered commands without synchronizing commands or sending messages. Use a dedicated test application.
@@ -211,14 +212,15 @@ The smoke test checks authentication, gateway readiness, installed servers and r
 | 1.0.0-RC2 | Published |
 | Website, documentation and JavaDocs | Online |
 | Complete live integration validation | Pending |
+| Continuous integration and secret scanning | Configured |
 | Automated release and documentation deployment | Planned |
 | 1.0.0 Stable | Planned |
 
 ## Feedback & Security
 
-Feedback, bug reports and feature suggestions are welcome. Include the Onyx4J version, Java version, a minimal reproduction and sanitized error output. Use the repository's issue tracker where you have access.
+Feedback, bug reports and feature suggestions are welcome. Include the Onyx4J version, Java version, a minimal reproduction and sanitized error output. Use the repository's issue tracker for non-security reports. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-Never commit app tokens, publishing credentials or private keys. Report security vulnerabilities privately to the maintainer rather than in a public issue.
+Never commit app tokens, publishing credentials or private keys. Report security vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
