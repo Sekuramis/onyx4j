@@ -7,6 +7,10 @@ import com.google.gson.JsonPrimitive;
 import de.onyx4j.api.exceptions.OnyxApiException;
 
 import java.net.URI;
+import java.nio.file.Path;
+import java.nio.file.Files;
+import java.io.IOException;
+import java.util.UUID;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -76,13 +80,54 @@ public final class OnyxRestClient implements AutoCloseable {
             throw new IllegalArgumentException("HTTP method and path must be provided");
         }
         if (closed) return CompletableFuture.failedFuture(new IllegalStateException("REST client is closed"));
-        JsonElement snapshot = body == null ? null : body.deepCopy();
+        HttpRequest.BodyPublisher publisher = body == null
+                ? HttpRequest.BodyPublishers.noBody()
+                : HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8);
+        return request(method, path, publisher, body == null ? null : "application/json", options.requestTimeout(), true);
+    }
+
+    public CompletableFuture<JsonElement> upload(Path file, String name, String type) {
+        Objects.requireNonNull(file, "file");
+        try {
+            if (!Files.isRegularFile(file)) throw new IllegalArgumentException("Upload requires a regular file");
+            String filename = name == null ? file.getFileName().toString() : name;
+            String mime = type == null ? Files.probeContentType(file) : type;
+            return multipart(filename, mime, HttpRequest.BodyPublishers.ofFile(file));
+        } catch (IOException exception) {
+            return CompletableFuture.failedFuture(exception);
+        }
+    }
+
+    public CompletableFuture<JsonElement> upload(byte[] bytes, String name, String type) {
+        return multipart(name, type, HttpRequest.BodyPublishers.ofByteArray(Objects.requireNonNull(bytes, "bytes").clone()));
+    }
+
+    private CompletableFuture<JsonElement> multipart(String name, String type, HttpRequest.BodyPublisher file) {
+        if (name == null || name.isBlank() || name.chars().anyMatch(ch -> ch < 32 || ch == 127 || ch == 34 || ch == 92))
+            throw new IllegalArgumentException("Invalid upload filename");
+        String mime = type == null ? "application/octet-stream" : type;
+        if (!mime.matches("[a-zA-Z0-9!#        JsonElement snapshot = body == null ? null : body.deepCopy();^_.+\\-]+/[a-zA-Z0-9!#        JsonElement snapshot = body == null ? null : body.deepCopy();^_.+\\-]+"))
+            throw new IllegalArgumentException("Invalid MIME type");
+        String boundary = "Onyx4J-" + UUID.randomUUID();
+        String prefix = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + name
+                + "\"\r\nContent-Type: " + mime + "\r\n\r\n";
+        String suffix = "\r\n--" + boundary + "--\r\n";
+        HttpRequest.BodyPublisher body = HttpRequest.BodyPublishers.concat(
+                HttpRequest.BodyPublishers.ofString(prefix, StandardCharsets.UTF_8), file,
+                HttpRequest.BodyPublishers.ofString(suffix, StandardCharsets.UTF_8));
+        return request("POST", "/upload", body, "multipart/form-data; boundary=" + boundary,
+                Duration.ofSeconds(120), false);
+    }
+
+    private CompletableFuture<JsonElement> request(String method, String path, HttpRequest.BodyPublisher body,
+            String contentType, Duration timeout, boolean retryable) {
+        if (closed) return CompletableFuture.failedFuture(new IllegalStateException("REST client is closed"));
         requests.increment();
         inFlight.increment();
         long start = System.nanoTime();
         CompletableFuture<JsonElement> future;
         try {
-            future = execute(method.toUpperCase(java.util.Locale.ROOT), path, snapshot, 0);
+            future = execute(method.toUpperCase(java.util.Locale.ROOT), path, body, contentType, timeout, retryable, 0);
         } catch (RuntimeException exception) {
             future = CompletableFuture.failedFuture(exception);
         }
@@ -94,7 +139,8 @@ public final class OnyxRestClient implements AutoCloseable {
         });
     }
 
-    private CompletableFuture<JsonElement> execute(String method, String path, JsonElement body, int attempt) {
+    private CompletableFuture<JsonElement> execute(String method, String path, HttpRequest.BodyPublisher body,
+            String contentType, Duration timeout, boolean retryable, int attempt) {
         if (closed) return CompletableFuture.failedFuture(new IllegalStateException("REST client is closed"));
         long wait = blockedUntil.get() - System.currentTimeMillis();
         if (wait > 0) {
@@ -103,31 +149,24 @@ public final class OnyxRestClient implements AutoCloseable {
             }
             return CompletableFuture.supplyAsync(() -> (Void) null,
                     CompletableFuture.delayedExecutor(wait, TimeUnit.MILLISECONDS))
-                    .thenCompose(ignored -> execute(method, path, body, attempt));
+                    .thenCompose(ignored -> execute(method, path, body, contentType, timeout, retryable, attempt));
         }
         attempts.increment();
         String url = baseUrl + (path.startsWith("/") ? path : "/" + path);
         HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
-                .timeout(options.requestTimeout())
+                .timeout(timeout)
                 .header("Accept", "application/json")
                 .header("Authorization", "Bot " + token)
-                .header("User-Agent", "onyx4j/0.17.0");
+                .header("User-Agent", "onyx4j/0.18.0");
 
-        if (body != null) {
-            builder.header("Content-Type", "application/json");
-        }
-
-        HttpRequest.BodyPublisher publisher = body == null
-                ? HttpRequest.BodyPublishers.noBody()
-                : HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8);
-
-        HttpRequest request = builder.method(method, publisher).build();
+        if (contentType != null) builder.header("Content-Type", contentType);
+        HttpRequest request = builder.method(method, body).build();
 
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                 .handle((response, exception) -> {
                     if (exception != null) {
-                        if (attempt < options.maxRetries() && method.equals("GET")) {
-                            return retryLater(method, path, body, attempt, backoff(attempt));
+                        if (retryable && attempt < options.maxRetries() && method.equals("GET")) {
+                            return retryLater(method, path, body, contentType, timeout, retryable, attempt, backoff(attempt));
                         }
                         return CompletableFuture.<JsonElement>failedFuture(
                                 new OnyxApiException(0, method, path, null, unwrap(exception))
@@ -142,15 +181,15 @@ public final class OnyxRestClient implements AutoCloseable {
                         long now = System.currentTimeMillis();
                         long safeDelay = Math.min(delay, Long.MAX_VALUE - now - 50);
                         blockedUntil.accumulateAndGet(now + safeDelay + 50, Math::max);
-                        if (attempt < options.maxRetries() && delay <= MAX_RETRY_DELAY
+                        if (retryable && attempt < options.maxRetries() && delay <= MAX_RETRY_DELAY
                                 && !path.startsWith("/interactions/")) {
-                            return retryLater(method, path, body, attempt, delay + 50);
+                            return retryLater(method, path, body, contentType, timeout, retryable, attempt, delay + 50);
                         }
                     }
 
-                    if (method.equals("GET") && attempt < options.maxRetries()
+                    if (retryable && method.equals("GET") && attempt < options.maxRetries()
                             && (status == 502 || status == 503 || status == 504)) {
-                        return retryLater(method, path, body, attempt, backoff(attempt));
+                        return retryLater(method, path, body, contentType, timeout, retryable, attempt, backoff(attempt));
                     }
 
                     if (status < 200 || status >= 300) {
@@ -174,13 +213,14 @@ public final class OnyxRestClient implements AutoCloseable {
     }
 
     private CompletableFuture<JsonElement> retryLater(
-            String method, String path, JsonElement body, int attempt, long delay
+            String method, String path, HttpRequest.BodyPublisher body, String contentType,
+            Duration timeout, boolean retryable, int attempt, long delay
     ) {
         retries.increment();
         return CompletableFuture.supplyAsync(
                 () -> (Void) null,
                 CompletableFuture.delayedExecutor(delay, TimeUnit.MILLISECONDS)
-        ).thenCompose(ignored -> execute(method, path, body, attempt + 1));
+        ).thenCompose(ignored -> execute(method, path, body, contentType, timeout, retryable, attempt + 1));
     }
 
     private static long backoff(int attempt) {

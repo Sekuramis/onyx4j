@@ -7,6 +7,8 @@ import de.onyx4j.api.entities.channel.ServerChannel;
 import de.onyx4j.api.entities.channel.TextChannel;
 import de.onyx4j.api.entities.channel.VoiceChannel;
 import de.onyx4j.api.entities.server.Server;
+import de.onyx4j.api.entities.message.Attachment;
+import java.nio.file.Path;
 import de.onyx4j.api.entities.server.InstalledServer;
 import de.onyx4j.api.concurrent.ServerTaskExecutor;
 import de.onyx4j.api.concurrent.ServerTaskOptions;
@@ -439,6 +441,25 @@ public final class OnyxClient
 		String path = "/servers/" + EntityJson.encode(serverId) + "/members/" + EntityJson.encode(userId);
 		return new RestAction<>(() -> rest.get(path)
 				.thenApply(response -> new Member(this, serverId, EntityJson.requireObject(response))));
+	}
+
+	public RestAction<Attachment> uploadFile(Path file)
+	{
+		return uploadFile(file, null, null);
+	}
+
+	public RestAction<Attachment> uploadFile(Path file, String name, String type)
+	{
+		java.util.Objects.requireNonNull(file, "file");
+		return new RestAction<>(() -> rest.upload(file, name, type)
+				.thenApply(response -> Attachment.fromJson(EntityJson.requireObject(response))));
+	}
+
+	public RestAction<Attachment> uploadFile(byte[] bytes, String name, String type)
+	{
+		byte[] snapshot = java.util.Objects.requireNonNull(bytes, "bytes").clone();
+		return new RestAction<>(() -> rest.upload(snapshot, name, type)
+				.thenApply(response -> Attachment.fromJson(EntityJson.requireObject(response))));
 	}
 
 	public ServerTaskExecutor getServerTaskExecutor()

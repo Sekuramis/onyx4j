@@ -5,6 +5,8 @@ import de.onyx4j.api.OnyxClientBuilder;
 import de.onyx4j.api.concurrent.ServerTaskOptions;
 import de.onyx4j.api.entities.User;
 import de.onyx4j.api.entities.message.MessageBuilder;
+import de.onyx4j.api.entities.message.EmbedBuilder;
+import de.onyx4j.api.entities.message.MessageLayout;
 import de.onyx4j.api.interactions.components.ButtonBuilder;
 import de.onyx4j.api.interactions.components.ButtonStyle;
 import de.onyx4j.api.interactions.components.ComponentRow;
@@ -84,7 +86,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 	@Override
 	public void onReady(ReadyEvent event) {
-		System.out.println("Onyx4J 0.17.0 connected!");
+		System.out.println("Onyx4J 0.18.0 connected!");
 		System.out.println(
 				"Registered commands: " +
 						event.getClient()
@@ -123,7 +125,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	)
 	public void about(SlashCommandInteractionEvent event) {
 		event.reply("""
-                Onyx4J 0.17.0-SNAPSHOT
+                Onyx4J 0.18.0-SNAPSHOT
                 The Java API for Onyx
                 Java 25
                 Annotation Command Framework
@@ -144,7 +146,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 		event.reply("""
                 Status: Online
-                API Version: 0.17.0-SNAPSHOT
+                API Version: 0.18.0-SNAPSHOT
                 Java Version: %s
                 Uptime: %dh %dm %ds
                 """.formatted(
@@ -226,7 +228,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	@Override
 	public void onMessageReceived(MessageReceivedEvent event) {
 		if (event.getMessage().isAuthorBot() || !"!interactions".equals(event.getMessage().getContentRaw())) return;
-		event.getChannel().sendMessage(Components.message("Onyx4J 0.17.0 Interaction Showcase",
+		event.getChannel().sendMessage(Components.message("Onyx4J 0.18.0 Interaction Showcase",
 				Components.row(
 						Components.primary("demo:ping", "Ping"),
 						Components.secondary("demo:ticket:42", "Ticket 42"),
@@ -333,7 +335,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	@SlashCommand(name = "messagecheck", description = "Test the advanced message builder")
 	public void messageCheck(SlashCommandInteractionEvent event) {
 		event.reply(new MessageBuilder()
-				.appendLine("**Onyx4J 0.17.0**")
+				.appendLine("**Onyx4J 0.18.0**")
 				.append("MessageBuilder showcase")
 				.addRow(ComponentRow.buttons(
 						ButtonBuilder.of(ButtonStyle.PRIMARY, "demo:ping", "Ping"),
@@ -435,6 +437,44 @@ public final class MainTest extends OnyxListenerAdapter {
 						.queue(response -> {}, this::onError), error -> {
 					onError(error);
 					event.replyEphemeral("Unable to retrieve installed servers.").queue(response -> {}, this::onError);
+				});
+	}
+
+	@SlashCommand(name = "embedcheck", description = "Test the embed builder")
+	public void embedCheck(SlashCommandInteractionEvent event) {
+		event.reply(new MessageBuilder().addEmbed(new EmbedBuilder()
+				.setTitle("Onyx4J 0.18.0")
+				.setDescription("Rich Message API")
+				.setColor("#7c5cff")
+				.addField("Version", "0.18.0-SNAPSHOT", true)
+				.addField("Status", "Online", true)
+				.setFooter("Onyx4J")
+				.setTimestamp(Instant.now())
+				.addBlock(MessageLayout.progress("Release progress", 90, 100)))
+				.build()).queue(result -> {}, this::onError);
+	}
+
+	@SlashCommand(name = "layoutcheck", description = "Test native Onyx layouts")
+	public void layoutCheck(SlashCommandInteractionEvent event) {
+		event.reply(new MessageBuilder().addLayout(MessageLayout.container("#7c5cff", false,
+				MessageLayout.heading("Onyx4J", 2),
+				MessageLayout.text("Native message layouts"),
+				MessageLayout.separator(true, false),
+				MessageLayout.columns(MessageLayout.stat("Status", "Online"),
+						MessageLayout.stat("Version", "0.18.0")),
+				MessageLayout.actions(Components.primary("demo:ping", "Ping"))))
+				.build()).queue(result -> {}, this::onError);
+	}
+
+	@SlashCommand(name = "uploadcheck", description = "Upload a generated test file")
+	@BotOwnerOnly
+	public void uploadCheck(SlashCommandInteractionEvent event) {
+		byte[] content = "Onyx4J 0.18.0 upload showcase".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+		event.getClient().uploadFile(content, "onyx4j-test.txt", "text/plain").queue(attachment ->
+				event.replyEphemeral(new MessageBuilder().setContent("Upload successful.")
+						.addAttachment(attachment).build()).queue(result -> {}, this::onError), error -> {
+					onError(error);
+					event.replyEphemeral("Upload failed.").queue(result -> {}, this::onError);
 				});
 	}
 

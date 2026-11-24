@@ -6,6 +6,8 @@ import com.google.gson.JsonObject;
 import de.onyx4j.api.OnyxClient;
 import de.onyx4j.api.entities.channel.TextChannel;
 import de.onyx4j.api.entities.message.MessageData;
+import de.onyx4j.api.entities.message.Attachment;
+import java.util.List;
 import de.onyx4j.api.requests.RestAction;
 
 import java.net.URLEncoder;
@@ -99,6 +101,33 @@ public final class Message {
         JsonElement components = data.get("components");
         return components != null && components.isJsonArray()
                 ? components.getAsJsonArray().deepCopy() : new JsonArray();
+    }
+
+    public JsonArray getEmbeds() {
+        return array("embeds");
+    }
+
+    public JsonArray getLayout() {
+        return array("layout");
+    }
+
+    public List<Attachment> getAttachments() {
+        return java.util.stream.StreamSupport.stream(array("attachments").spliterator(), false)
+                .map(value -> Attachment.fromJson(value.getAsJsonObject())).toList();
+    }
+
+    private JsonArray array(String key) {
+        JsonElement value = data.get(key);
+        return value != null && value.isJsonArray() ? value.getAsJsonArray().deepCopy() : new JsonArray();
+    }
+
+    public RestAction<Message> editMessage(MessageData message) {
+        OnyxClient connectedClient = requireClient();
+        String messageId = requireMessageId();
+        JsonObject payload = Objects.requireNonNull(message, "message").toInteractionJson();
+        return new RestAction<>(() -> connectedClient.getRestClient()
+                .patch("/messages/" + encode(messageId), payload)
+                .thenApply(result -> new Message(connectedClient, result.getAsJsonObject())));
     }
 
     public RestAction<Message> editMessage(String content) {
