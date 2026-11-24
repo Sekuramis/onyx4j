@@ -6,6 +6,11 @@ import com.google.gson.JsonObject;
 import de.onyx4j.api.OnyxClient;
 import de.onyx4j.api.entities.Message;
 import de.onyx4j.api.entities.message.MessageData;
+import de.onyx4j.api.entities.message.ScheduledMessage;
+import de.onyx4j.api.entities.message.ScheduleRepeat;
+import de.onyx4j.api.entities.panel.Panel;
+import de.onyx4j.api.entities.panel.PanelPlacement;
+import java.time.Instant;
 import de.onyx4j.api.internal.EntityJson;
 import de.onyx4j.api.requests.RestAction;
 
@@ -203,6 +208,22 @@ public final class TextChannel implements MessageChannel, ServerChannel {
                             return List.copyOf(messages);
                         })
         );
+    }
+
+    public RestAction<List<Panel>> retrievePanels() {
+        return client.retrievePanels(id);
+    }
+
+    public RestAction<Panel> createPanel(String title, String url, PanelPlacement placement, JsonObject state) {
+        return client.createPanel(id, title, url, placement, state);
+    }
+
+    public RestAction<List<ScheduledMessage>> retrieveScheduledMessages() {
+        return client.retrieveScheduledMessages(id);
+    }
+
+    public RestAction<ScheduledMessage> scheduleMessage(MessageData message, Instant sendAt, ScheduleRepeat repeat) {
+        return client.scheduleMessage(id, message, sendAt, repeat);
     }
 
     @Override

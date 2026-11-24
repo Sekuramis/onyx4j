@@ -5,6 +5,7 @@ import de.onyx4j.api.events.OnyxListenerAdapter;
 import de.onyx4j.api.events.gateway.GatewayEventBus;
 import de.onyx4j.api.interactions.commands.SlashCommandData;
 import de.onyx4j.api.requests.RestOptions;
+import de.onyx4j.api.entities.presence.Presence;
 import de.onyx4j.api.concurrent.ServerTaskOptions;
 import de.onyx4j.api.gateway.EventFilter;
 import de.onyx4j.api.interactions.commands.middleware.CommandExceptionHandler;
@@ -34,6 +35,7 @@ public final class OnyxClientBuilder
 	private RestOptions restOptions = RestOptions.defaults();
 	private ServerTaskOptions serverTaskOptions = ServerTaskOptions.defaults();
 	private EventFilter eventFilter = EventFilter.all();
+	private Presence presence;
 
 	private final List<OnyxListenerAdapter> listeners = new ArrayList<>();
 	private final List<Object> commandHandlers = new ArrayList<>();
@@ -78,6 +80,7 @@ public final class OnyxClientBuilder
 				serverTaskOptions
 		);
 		client.setEventFilter(eventFilter);
+		client.configurePresence(presence);
 
 		client.getCommandRegistry()
 				.addCommands(registeredCommands.toArray(SlashCommandData[]::new))
@@ -108,6 +111,12 @@ public final class OnyxClientBuilder
 	public OnyxClientBuilder setEventFilter(EventFilter filter)
 	{
 		eventFilter = Objects.requireNonNull(filter, "filter");
+		return this;
+	}
+
+	public OnyxClientBuilder setPresence(Presence presence)
+	{
+		this.presence = Objects.requireNonNull(presence, "presence");
 		return this;
 	}
 

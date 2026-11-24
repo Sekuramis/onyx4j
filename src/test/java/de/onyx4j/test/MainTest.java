@@ -5,6 +5,10 @@ import de.onyx4j.api.OnyxClientBuilder;
 import de.onyx4j.api.concurrent.ServerTaskOptions;
 import de.onyx4j.api.entities.User;
 import de.onyx4j.api.entities.message.MessageBuilder;
+import de.onyx4j.api.entities.message.ScheduleRepeat;
+import de.onyx4j.api.entities.presence.Activity;
+import de.onyx4j.api.entities.presence.OnlineStatus;
+import de.onyx4j.api.entities.presence.Presence;
 import de.onyx4j.api.entities.message.EmbedBuilder;
 import de.onyx4j.api.entities.message.MessageLayout;
 import de.onyx4j.api.interactions.components.ButtonBuilder;
@@ -71,6 +75,7 @@ public final class MainTest extends OnyxListenerAdapter {
 				.addEventListeners(handler)
 				.addCommandHandlers(handler)
 				.addEventHandlers(handler)
+				.setPresence(Presence.of(OnlineStatus.ONLINE, Activity.playing("Onyx4J 0.19.0")))
 				.setServerTaskOptions(new ServerTaskOptions(4, 256))
 				.setBotOwnerIds(ownerId == null || ownerId.isBlank() ? new String[0] : new String[]{ownerId})
 				.addInteractionHandlers(handler)
@@ -86,7 +91,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 	@Override
 	public void onReady(ReadyEvent event) {
-		System.out.println("Onyx4J 0.18.0 connected!");
+		System.out.println("Onyx4J 0.19.0 connected!");
 		System.out.println(
 				"Registered commands: " +
 						event.getClient()
@@ -125,7 +130,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	)
 	public void about(SlashCommandInteractionEvent event) {
 		event.reply("""
-                Onyx4J 0.18.0-SNAPSHOT
+                Onyx4J 0.19.0-SNAPSHOT
                 The Java API for Onyx
                 Java 25
                 Annotation Command Framework
@@ -146,7 +151,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 		event.reply("""
                 Status: Online
-                API Version: 0.18.0-SNAPSHOT
+                API Version: 0.19.0-SNAPSHOT
                 Java Version: %s
                 Uptime: %dh %dm %ds
                 """.formatted(
@@ -228,7 +233,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	@Override
 	public void onMessageReceived(MessageReceivedEvent event) {
 		if (event.getMessage().isAuthorBot() || !"!interactions".equals(event.getMessage().getContentRaw())) return;
-		event.getChannel().sendMessage(Components.message("Onyx4J 0.18.0 Interaction Showcase",
+		event.getChannel().sendMessage(Components.message("Onyx4J 0.19.0 Interaction Showcase",
 				Components.row(
 						Components.primary("demo:ping", "Ping"),
 						Components.secondary("demo:ticket:42", "Ticket 42"),
@@ -335,7 +340,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	@SlashCommand(name = "messagecheck", description = "Test the advanced message builder")
 	public void messageCheck(SlashCommandInteractionEvent event) {
 		event.reply(new MessageBuilder()
-				.appendLine("**Onyx4J 0.18.0**")
+				.appendLine("**Onyx4J 0.19.0**")
 				.append("MessageBuilder showcase")
 				.addRow(ComponentRow.buttons(
 						ButtonBuilder.of(ButtonStyle.PRIMARY, "demo:ping", "Ping"),
@@ -443,10 +448,10 @@ public final class MainTest extends OnyxListenerAdapter {
 	@SlashCommand(name = "embedcheck", description = "Test the embed builder")
 	public void embedCheck(SlashCommandInteractionEvent event) {
 		event.reply(new MessageBuilder().addEmbed(new EmbedBuilder()
-				.setTitle("Onyx4J 0.18.0")
+				.setTitle("Onyx4J 0.19.0")
 				.setDescription("Rich Message API")
 				.setColor("#7c5cff")
-				.addField("Version", "0.18.0-SNAPSHOT", true)
+				.addField("Version", "0.19.0-SNAPSHOT", true)
 				.addField("Status", "Online", true)
 				.setFooter("Onyx4J")
 				.setTimestamp(Instant.now())
@@ -461,7 +466,7 @@ public final class MainTest extends OnyxListenerAdapter {
 				MessageLayout.text("Native message layouts"),
 				MessageLayout.separator(true, false),
 				MessageLayout.columns(MessageLayout.stat("Status", "Online"),
-						MessageLayout.stat("Version", "0.18.0")),
+						MessageLayout.stat("Version", "0.19.0")),
 				MessageLayout.actions(Components.primary("demo:ping", "Ping"))))
 				.build()).queue(result -> {}, this::onError);
 	}
@@ -469,13 +474,68 @@ public final class MainTest extends OnyxListenerAdapter {
 	@SlashCommand(name = "uploadcheck", description = "Upload a generated test file")
 	@BotOwnerOnly
 	public void uploadCheck(SlashCommandInteractionEvent event) {
-		byte[] content = "Onyx4J 0.18.0 upload showcase".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+		byte[] content = "Onyx4J 0.19.0 upload showcase".getBytes(java.nio.charset.StandardCharsets.UTF_8);
 		event.getClient().uploadFile(content, "onyx4j-test.txt", "text/plain").queue(attachment ->
 				event.replyEphemeral(new MessageBuilder().setContent("Upload successful.")
 						.addAttachment(attachment).build()).queue(result -> {}, this::onError), error -> {
 					onError(error);
 					event.replyEphemeral("Upload failed.").queue(result -> {}, this::onError);
 				});
+	}
+
+	@SlashCommand(name = "presencecheck", description = "Change the bot activity")
+	@BotOwnerOnly
+	public void presenceCheck(SlashCommandInteractionEvent event,
+			@CommandOption(name = "activity", description = "New activity") String activity) {
+		event.getClient().setPresence(Presence.activity(Activity.playing(activity))).queue(result ->
+				event.replyEphemeral("Activity updated.").queue(response -> {}, this::onError),
+				error -> {
+					onError(error);
+					event.replyEphemeral("Presence update failed.").queue(response -> {}, this::onError);
+				});
+	}
+
+	@SlashCommand(name = "panelcheck", description = "List panels in this channel")
+	@BotOwnerOnly
+	@ServerOnly
+	public void panelCheck(SlashCommandInteractionEvent event) {
+		event.getClient().retrievePanels(event.getChannelId()).queue(panels ->
+				event.replyEphemeral("Panels: " + panels.size()).queue(response -> {}, this::onError),
+				error -> {
+					onError(error);
+					event.replyEphemeral("Panel retrieval failed.").queue(response -> {}, this::onError);
+				});
+	}
+
+	@SlashCommand(name = "schedulecheck", description = "Schedule a test message in two minutes")
+	@BotOwnerOnly
+	@ServerOnly
+	public void scheduleCheck(SlashCommandInteractionEvent event) {
+		event.getClient().scheduleMessage(event.getChannelId(),
+				new MessageBuilder().setContent("Onyx4J scheduled message showcase").build(),
+				Instant.now().plusSeconds(120), ScheduleRepeat.NONE).queue(message ->
+				event.replyEphemeral("Scheduled message: " + message.getId()).queue(response -> {}, this::onError),
+				error -> {
+					onError(error);
+					event.replyEphemeral("Scheduling failed.").queue(response -> {}, this::onError);
+				});
+	}
+
+	@SlashCommand(name = "dmcheck", description = "Send yourself a test direct message")
+	@BotOwnerOnly
+	public void dmCheck(SlashCommandInteractionEvent event) {
+		event.getClient().sendDirectMessage(event.getUser().getId(), "Onyx4J 0.19.0 DM showcase")
+				.queue(message -> event.replyEphemeral("DM sent.").queue(response -> {}, this::onError),
+						error -> {
+							onError(error);
+							event.replyEphemeral("DM failed.").queue(response -> {}, this::onError);
+						});
+	}
+
+	@SlashCommand(name = "userid", description = "Show your Onyx user ID")
+	public void userId(SlashCommandInteractionEvent event) {
+		event.replyEphemeral("Your User ID: `" + event.getUser().getId() + "`")
+				.queue(result -> {}, this::onError);
 	}
 
 	private static String loadToken() throws Exception {

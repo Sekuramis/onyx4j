@@ -8,6 +8,17 @@ import de.onyx4j.api.entities.channel.TextChannel;
 import de.onyx4j.api.entities.channel.VoiceChannel;
 import de.onyx4j.api.entities.server.Server;
 import de.onyx4j.api.entities.message.Attachment;
+import de.onyx4j.api.entities.Message;
+import de.onyx4j.api.entities.message.MessageData;
+import de.onyx4j.api.entities.message.MessageBuilder;
+import de.onyx4j.api.entities.message.DirectMessage;
+import de.onyx4j.api.entities.message.ScheduledMessage;
+import de.onyx4j.api.entities.message.ScheduleRepeat;
+import de.onyx4j.api.entities.panel.Panel;
+import de.onyx4j.api.entities.panel.PanelPlacement;
+import de.onyx4j.api.entities.presence.Presence;
+import java.time.Instant;
+import java.util.Objects;
 import java.nio.file.Path;
 import de.onyx4j.api.entities.server.InstalledServer;
 import de.onyx4j.api.concurrent.ServerTaskExecutor;
@@ -82,6 +93,9 @@ public final class OnyxClient
 	private final ServerTaskExecutor serverTaskExecutor;
 
 	private final Object lifecycleLock = new Object();
+	private final Object presenceLock = new Object();
+	private Presence desiredPresence;
+	private CompletableFuture<Void> presenceTail = CompletableFuture.completedFuture(null);
 	private volatile boolean connected;
 	private volatile boolean everReady;
 	private volatile boolean shuttingDown;
@@ -169,6 +183,7 @@ public final class OnyxClient
 			gatewayStatus.markReady();
 		}
 
+		applyConfiguredPresence();
 		ReadyEvent event = new ReadyEvent(this, reconnect, data);
 
 		ready.complete(this);
@@ -441,6 +456,125 @@ public final class OnyxClient
 		String path = "/servers/" + EntityJson.encode(serverId) + "/members/" + EntityJson.encode(userId);
 		return new RestAction<>(() -> rest.get(path)
 				.thenApply(response -> new Member(this, serverId, EntityJson.requireObject(response))));
+	}
+
+	void configurePresence(Presence presence)
+	{
+		synchronized (presenceLock) {
+			desiredPresence = presence;
+		}
+	}
+
+	private void applyConfiguredPresence()
+	{
+		CompletableFuture<Void> future;
+		synchronized (presenceLock) {
+			if (desiredPresence == null || shuttingDown) return;
+			future = enqueuePresence(desiredPresence);
+		}
+		future.whenComplete((result, error) -> {
+			if (error != null && !shuttingDown) handleError(error);
+		});
+	}
+
+	private CompletableFuture<Void> enqueuePresence(Presence presence)
+	{
+		JsonObject body = presence.toJson();
+		presenceTail = presenceTail.handle((result, error) -> null)
+				.thenCompose(ignored -> rest.patch("/apps/@me/presence", body))
+				.thenApply(result -> null);
+		return presenceTail;
+	}
+
+	public RestAction<Void> setPresence(Presence presence)
+	{
+		Objects.requireNonNull(presence, "presence");
+		return new RestAction<>(() -> {
+			synchronized (presenceLock) {
+				if (shuttingDown) return CompletableFuture.failedFuture(new IllegalStateException("Client was shut down"));
+				desiredPresence = desiredPresence == null ? presence : desiredPresence.merge(presence);
+				return enqueuePresence(presence);
+			}
+		});
+	}
+
+	public RestAction<Void> clearActivity()
+	{
+		return setPresence(Presence.activity(null));
+	}
+
+	public RestAction<DirectMessage> sendDirectMessage(String userId, String content)
+	{
+		return sendDirectMessage(userId, new MessageBuilder().setContent(content).build());
+	}
+
+	public RestAction<DirectMessage> sendDirectMessage(String userId, MessageData message)
+	{
+		String path = "/users/" + EntityJson.encode(userId) + "/dm";
+		JsonObject body = Objects.requireNonNull(message, "message").toJson();
+		return new RestAction<>(() -> rest.post(path, body).thenApply(response -> {
+			JsonObject data = EntityJson.requireObject(response);
+			String channelId = EntityJson.string(data, "channel_id");
+			JsonObject sent = EntityJson.requireObject(data.get("message")).deepCopy();
+			if (!sent.has("channel_id") || sent.get("channel_id").isJsonNull())
+				sent.addProperty("channel_id", channelId);
+			return new DirectMessage(channelId, new Message(this, sent));
+		}));
+	}
+
+	public RestAction<List<Panel>> retrievePanels(String channelId)
+	{
+		String path = "/channels/" + EntityJson.encode(channelId) + "/panels";
+		return new RestAction<>(() -> rest.get(path).thenApply(response -> {
+			var panels = new java.util.ArrayList<Panel>();
+			for (JsonElement item : EntityJson.requireArray(response))
+				panels.add(new Panel(this, EntityJson.requireObject(item)));
+			return List.copyOf(panels);
+		}));
+	}
+
+	public RestAction<Panel> createPanel(String channelId, String title, String url,
+			PanelPlacement placement, JsonObject state)
+	{
+		String path = "/channels/" + EntityJson.encode(channelId) + "/panels";
+		if (url == null || url.isBlank()) throw new IllegalArgumentException("Panel URL is required");
+		JsonObject body = new JsonObject();
+		if (title != null) body.addProperty("title", title);
+		body.addProperty("url", url);
+		if (placement != null) body.addProperty("placement", placement.getValue());
+		if (state != null) body.add("state", state.deepCopy());
+		return new RestAction<>(() -> rest.post(path, body)
+				.thenApply(response -> new Panel(this, EntityJson.requireObject(response))));
+	}
+
+	public RestAction<List<ScheduledMessage>> retrieveScheduledMessages(String channelId)
+	{
+		String path = "/channels/" + EntityJson.encode(channelId) + "/scheduled";
+		return new RestAction<>(() -> rest.get(path).thenApply(response -> {
+			var messages = new java.util.ArrayList<ScheduledMessage>();
+			for (JsonElement item : EntityJson.requireArray(response))
+				messages.add(new ScheduledMessage(this, EntityJson.requireObject(item)));
+			return List.copyOf(messages);
+		}));
+	}
+
+	public RestAction<ScheduledMessage> scheduleMessage(String channelId, MessageData message,
+			Instant sendAt, ScheduleRepeat repeat)
+	{
+		String path = "/channels/" + EntityJson.encode(channelId) + "/scheduled";
+		JsonObject body = Objects.requireNonNull(message, "message").toJson();
+		Objects.requireNonNull(sendAt, "sendAt");
+		Objects.requireNonNull(repeat, "repeat");
+		if (body.keySet().stream().anyMatch(key -> !key.equals("content") && !key.equals("embeds")))
+			throw new IllegalArgumentException("Scheduled messages support content and embeds only");
+		body.addProperty("send_at", sendAt.toEpochMilli());
+		body.addProperty("repeat", repeat.getValue());
+		return new RestAction<>(() -> {
+			if (sendAt.isBefore(Instant.now().plusSeconds(60)))
+				return CompletableFuture.failedFuture(new IllegalArgumentException("Scheduled time must be at least one minute in the future"));
+			return rest.post(path, body).thenApply(response ->
+					new ScheduledMessage(this, EntityJson.requireObject(response)));
+		});
 	}
 
 	public RestAction<Attachment> uploadFile(Path file)

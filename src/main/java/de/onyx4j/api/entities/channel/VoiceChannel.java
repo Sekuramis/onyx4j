@@ -4,6 +4,8 @@ import com.google.gson.JsonObject;
 import de.onyx4j.api.OnyxClient;
 import de.onyx4j.api.entities.voice.VoiceState;
 import de.onyx4j.api.entities.voice.VoiceToken;
+import de.onyx4j.api.entities.panel.Panel;
+import de.onyx4j.api.entities.panel.PanelPlacement;
 import java.util.List;
 import de.onyx4j.api.internal.EntityJson;
 import de.onyx4j.api.requests.RestAction;
@@ -69,6 +71,14 @@ public final class VoiceChannel implements ServerChannel {
 
     public List<VoiceState> getCachedVoiceStates() {
         return client.getVoiceStateCache().getChannelStates(getId());
+    }
+
+    public RestAction<List<Panel>> retrievePanels() {
+        return client.retrievePanels(getId());
+    }
+
+    public RestAction<Panel> createPanel(String title, String url, PanelPlacement placement, JsonObject state) {
+        return client.createPanel(getId(), title, url, placement, state);
     }
 
     public RestAction<VoiceToken> requestVoiceToken() {
