@@ -29,6 +29,7 @@ public final class OnyxClientBuilder
 	private boolean autoSyncCommands = true;
 
 	private final List<OnyxListenerAdapter> listeners = new ArrayList<>();
+	private final List<Object> commandHandlers = new ArrayList<>();
 
 	private OnyxClientBuilder(String token)
 	{
@@ -57,17 +58,18 @@ public final class OnyxClientBuilder
 		return this;
 	}
 
-	public OnyxClient build()
-	{
-		OnyxClient client = new OnyxClient(token, baseUrl, List.copyOf(listeners));
+	public OnyxClient build() {
+		OnyxClient client = new OnyxClient(
+				token,
+				baseUrl,
+				List.copyOf(listeners)
+		);
 
-		client.getCommandRegistry().addCommands(registeredCommands.toArray(SlashCommandData[]::new))
+		client.getCommandRegistry()
+				.addCommands(registeredCommands.toArray(SlashCommandData[]::new))
 				.setAutoSync(autoSyncCommands);
 
-		for (Consumer<GatewayEventBus> listener : gatewayListeners) {
-			listener.accept(client.getGatewayEventBus());
-		}
-
+		client.getCommandRouter().registerHandlers(commandHandlers.toArray());
 		client.connect();
 		return client;
 	}
@@ -96,6 +98,11 @@ public final class OnyxClientBuilder
 		Objects.requireNonNull(handler, "handler");
 
 		gatewayListeners.add(bus -> bus.on(type, handler));
+		return this;
+	}
+
+	public OnyxClientBuilder addCommandHandlers(Object... handlers) {
+		commandHandlers.addAll(List.of(handlers));
 		return this;
 	}
 

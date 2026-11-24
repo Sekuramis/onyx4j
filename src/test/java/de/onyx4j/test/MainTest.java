@@ -2,24 +2,19 @@ package de.onyx4j.test;
 
 import de.onyx4j.api.OnyxClient;
 import de.onyx4j.api.OnyxClientBuilder;
+import de.onyx4j.api.entities.User;
 import de.onyx4j.api.events.OnyxListenerAdapter;
 import de.onyx4j.api.events.ReadyEvent;
 import de.onyx4j.api.events.interaction.SlashCommandInteractionEvent;
-import de.onyx4j.api.interactions.commands.CommandOptionData;
-import de.onyx4j.api.interactions.commands.Commands;
-
-import java.time.Duration;
-import java.util.concurrent.CountDownLatch;
-
-import de.onyx4j.test.showcase.ShowcaseListener;
+import de.onyx4j.api.interactions.commands.annotation.CommandOption;
+import de.onyx4j.api.interactions.commands.annotation.SlashCommand;
 import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.LoaderOptions;
-import org.yaml.snakeyaml.constructor.SafeConstructor;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 
 /**
@@ -31,117 +26,203 @@ import java.util.Map;
  * muss Schadensersatz leisten (§ 97 UrhG).
  */
 
-public final class MainTest
-{
+public final class MainTest extends OnyxListenerAdapter {
 
-	private static final long STARTED_AT = System.nanoTime();
+	private final Instant startedAt = Instant.now();
 
-	static void main(String[] args) throws InterruptedException
-	{
-		String token = loadToken();
+	public static void main(String[] args) throws Exception {
 
-		if (token == null || token.isBlank())
-			throw new IllegalStateException("ONYX_BOT_TOKEN is missing");
+		MainTest handler = new MainTest();
 
-		OnyxClient client = OnyxClientBuilder.createDefault(token)
-				.addCommands(Commands.slash("ping", "Test the Onyx4J gateway connection"),
-						Commands.slash("about", "Display information about the Onyx4J SDK"),
-						Commands.slash("status", "Display the current showcase bot status"),
-						Commands.slash("whoami", "Display your Onyx account information"),
-						Commands.slash("language", "Choose your programming language").addOptions(
-								CommandOptionData.string("name", "Programming language").setRequired(true)
-										.setAutocomplete(true)))
-				.addEventListeners(new OnyxListenerAdapter()
-		{
-			@Override
-			public void onReady(ReadyEvent event)
-			{
-				System.out.println("Onyx4J Showcase connected");
+		OnyxClient client = OnyxClientBuilder
+				.createDefault(loadToken())
+				.addEventListeners(handler)
+				.addCommandHandlers(handler)
+				.setAutoSyncCommands(true)
+				.build();
 
-				if (event.isReconnect())
-					System.out.println("Gateway reconnected");
-			}
-
-			@Override
-			public void onSlashCommandInteraction(SlashCommandInteractionEvent event)
-			{
-				switch (event.getName())
-				{
-
-				case "ping" -> event.reply("Pong! Onyx4J 0.4.0 | Java 25").queue();
-
-				case "about" -> event.reply(
-								"Onyx4J - Java API for Onyx\n" + "Version: 0.4.0-SNAPSHOT\n" + "Language: Java 25\n"
-										+ "Developer: Sekuramis\n" + "Gateway: Socket.IO\n"
-										+ "Features: Events, Slash Commands, REST, " + "Messages, Channels, Roles and Members")
-						.queue();
-
-				case "status" ->
-				{
-					long uptime = Duration.ofNanos(System.nanoTime() - STARTED_AT).toSeconds();
-
-					event.reply(
-							"Onyx4J Showcase Status\n" + "Runtime: Java " + Runtime.version().feature() + "\nUptime: "
-									+ uptime + " seconds" + "\nSDK: 0.4.0-SNAPSHOT").queue();
-				}
-
-				case "whoami" ->
-				{
-					var user = event.getUser();
-
-					if (user == null)
-					{
-						event.replyEphemeral("User information is unavailable.").queue();
-						return;
-					}
-
-					event.replyEphemeral("Your Onyx Profile\n" + "Username: " + user.getName() + "\nDisplay Name: "
-							+ user.getDisplayName() + "\nUser ID: " + user.getId()).queue();
-				}
-
-				default ->
-				{
-				}
-				}
-			}
-
-			@Override
-			public void onError(Throwable error)
-			{
-				error.printStackTrace();
-			}
-		}).addEventListeners(new ShowcaseListener()).build();
-
-		Runtime.getRuntime().addShutdownHook(new Thread(client::shutdown));
+		Runtime.getRuntime().addShutdownHook(
+				new Thread(client::shutdown)
+		);
 
 		client.awaitReady();
 	}
 
-	private static String loadToken()
-	{
-		Path path = Path.of("config.yml");
+	@Override
+	public void onReady(ReadyEvent event) {
+		System.out.println("Onyx4J 0.9.0 connected!");
+		System.out.println(
+				"Registered commands: " +
+						event.getClient()
+								.getCommandRegistry()
+								.getCommands()
+								.size()
+		);
+	}
 
-		if (!Files.isRegularFile(path))
-		{
-			throw new IllegalStateException("config.yml not found: " + path.toAbsolutePath());
+	@Override
+	public void onReconnect(ReadyEvent event) {
+		System.out.println("Gateway reconnected.");
+	}
+
+	@Override
+	public void onDisconnect(String reason) {
+		System.out.println("Disconnected: " + reason);
+	}
+
+	@Override
+	public void onError(Throwable error) {
+		error.printStackTrace();
+	}
+
+	@SlashCommand(
+			name = "ping",
+			description = "Check if the bot is online"
+	)
+	public void ping(SlashCommandInteractionEvent event) {
+		event.reply("Pong!").queue();
+	}
+
+	@SlashCommand(
+			name = "about",
+			description = "Information about Onyx4J"
+	)
+	public void about(SlashCommandInteractionEvent event) {
+		event.reply("""
+                Onyx4J 0.9.0-SNAPSHOT
+                The Java API for Onyx
+                Java 25
+                Annotation Command Framework
+                Developed by Sekuramis
+                """).queue();
+	}
+
+	@SlashCommand(
+			name = "status",
+			description = "Display the current bot status"
+	)
+	public void status(SlashCommandInteractionEvent event) {
+
+		Duration uptime = Duration.between(
+				startedAt,
+				Instant.now()
+		);
+
+		event.reply("""
+                Status: Online
+                API Version: 0.9.0-SNAPSHOT
+                Java Version: %s
+                Uptime: %dh %dm %ds
+                """.formatted(
+				Runtime.version(),
+				uptime.toHours(),
+				uptime.toMinutesPart(),
+				uptime.toSecondsPart()
+		)).queue();
+	}
+
+	@SlashCommand(
+			name = "whoami",
+			description = "Display your user information"
+	)
+	public void whoami(SlashCommandInteractionEvent event) {
+
+		User user = event.getUser();
+
+		event.replyEphemeral("""
+                Username: %s
+                Display Name: %s
+                User ID: %s
+                """.formatted(
+				user.getName(),
+				user.getDisplayName(),
+				user.getId()
+		)).queue();
+	}
+
+	@SlashCommand(
+			name = "echo",
+			description = "Repeat your message"
+	)
+	public void echo(
+			SlashCommandInteractionEvent event,
+
+			@CommandOption(
+					name = "message",
+					description = "The message to repeat"
+			) String message,
+
+			@CommandOption(
+					name = "ephemeral",
+					description = "Only visible to you",
+					required = false
+			) Boolean ephemeral
+	) {
+
+		if (Boolean.TRUE.equals(ephemeral)) {
+			event.replyEphemeral(message).queue();
+			return;
 		}
 
-		try (InputStream input = Files.newInputStream(path))
-		{
-			Yaml yaml = new Yaml(new SafeConstructor(new LoaderOptions()));
+		event.reply(message).queue();
+	}
 
-			Object result = yaml.load(input);
+	@SlashCommand(
+			name = "add",
+			description = "Add two numbers"
+	)
+	public void add(
+			SlashCommandInteractionEvent event,
 
-			if (!(result instanceof Map<?, ?> config) || !(config.get("bot") instanceof Map<?, ?> bot) || !(bot.get(
-					"token") instanceof String token) || token.isBlank())
-			{
-				throw new IllegalStateException("Invalid or missing bot.token in config.yml");
+			@CommandOption(
+					name = "first",
+					description = "First number"
+			) double first,
+
+			@CommandOption(
+					name = "second",
+					description = "Second number"
+			) double second
+	) {
+		event.reply(
+				"Result: " + (first + second)
+		).queue();
+	}
+
+	private static String loadToken() throws Exception {
+
+		Path path = Path.of("config.yml");
+
+		if (!Files.exists(path)) {
+			throw new IllegalStateException(
+					"config.yml not found"
+			);
+		}
+
+		try (InputStream input = Files.newInputStream(path)) {
+
+			Object loaded = new Yaml().load(input);
+
+			if (!(loaded instanceof Map<?, ?> config)) {
+				throw new IllegalStateException(
+						"Invalid config.yml"
+				);
+			}
+
+			if (!(config.get("bot") instanceof Map<?, ?> bot)) {
+				throw new IllegalStateException(
+						"Missing bot configuration"
+				);
+			}
+
+			if (!(bot.get("token") instanceof String token)
+					|| token.isBlank()) {
+				throw new IllegalStateException(
+						"Missing bot token"
+				);
 			}
 
 			return token;
-		} catch (IOException exception)
-		{
-			throw new IllegalStateException("Failed to read config.yml", exception);
 		}
 	}
 }

@@ -28,7 +28,7 @@ import de.onyx4j.api.gateway.EventFilter;
 import de.onyx4j.api.gateway.GatewayStatus;
 import de.onyx4j.api.events.gateway.GatewayEventBus;
 import de.onyx4j.api.events.gateway.EventSubscription;
-import de.onyx4j.api.events.GatewayEvent;
+import de.onyx4j.api.interactions.commands.CommandRouter;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -36,8 +36,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -57,6 +55,7 @@ public final class OnyxClient
 	private final CompletableFuture<OnyxClient> ready;
 	private final AtomicBoolean started;
 	private final CommandRegistry commandRegistry;
+	private final CommandRouter commandRouter;
 	private final InteractionAutoDefer autoDefer = new InteractionAutoDefer(2500);
 	private final EntityCache entityCache;
 	private final GatewayStatus gatewayStatus = new GatewayStatus();
@@ -71,6 +70,7 @@ public final class OnyxClient
 	{
 		this.rest = new OnyxRestClient(token, baseUrl);
 		this.commandRegistry = new CommandRegistry(rest);
+		this.commandRouter = new CommandRouter(commandRegistry);
 		this.listeners = new CopyOnWriteArrayList<>(listeners);
 		this.ready = new CompletableFuture<>();
 		this.started = new AtomicBoolean();
@@ -215,9 +215,20 @@ public final class OnyxClient
 
 			SlashCommandInteractionEvent event = new SlashCommandInteractionEvent(this, payload);
 
-			autoDefer.schedule(event::isAcknowledged, () -> event.deferReply().queue(), this::handleError);
+			autoDefer.schedule(
+					event::isAcknowledged,
+					() -> event.deferReply().queue(),
+					this::handleError
+			);
 
-			dispatch(listener -> listener.onSlashCommandInteraction(event));
+			try
+			{
+				if (!commandRouter.dispatch(event))
+					dispatch(listener -> listener.onSlashCommandInteraction(event));
+			} catch (Exception exception)
+			{
+				handleError(exception);
+			}
 		}
 
 		case "autocomplete" ->
@@ -403,6 +414,11 @@ public final class OnyxClient
 			Duration timeout)
 	{
 		return gatewayEventBus.waitFor(type, filter, timeout);
+	}
+
+	public CommandRouter getCommandRouter()
+	{
+		return commandRouter;
 	}
 
 }
