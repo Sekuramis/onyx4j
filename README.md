@@ -7,6 +7,7 @@
   <a href="https://repo.onyx4j.de/#/releases/de/onyx4j/onyx4j"><img src="https://img.shields.io/badge/Release-1.0.0--RC2-a78bfa?style=for-the-badge&labelColor=15151c" alt="Release 1.0.0-RC2" /></a>
   <img src="https://img.shields.io/badge/Java-25+-9b8acb?style=for-the-badge&logo=openjdk&logoColor=white&labelColor=15151c" alt="Java 25+" />
   <img src="https://img.shields.io/badge/Platform-Onyx-aaa5bd?style=for-the-badge&labelColor=15151c" alt="Onyx" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-a78bfa?style=for-the-badge&labelColor=15151c" alt="License Apache 2.0" /></a>
 
   <h3>Build. Connect. Extend.</h3>
   <p>An independent, developer-first Java API for building applications, bots and integrations for Onyx.</p>
@@ -221,9 +222,11 @@ Never commit app tokens, publishing credentials or private keys. Report security
 
 ## License
 
-Copyright © 2026 Sekuramis. All rights reserved.
+Copyright © 2026 Sekuramis.
 
-No open-source license has been declared. Public availability of Maven artifacts does not imply permission to redistribute or modify the source code. Refer to the existing copyright notices and contact the copyright holder for permissions.
+Onyx4J is licensed under the Apache License, Version 2.0 (Apache-2.0).
+
+See the [LICENSE](LICENSE) file for details.
 
 ---
 
