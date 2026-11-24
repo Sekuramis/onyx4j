@@ -1,6 +1,7 @@
 plugins {
     `java-library`
     `maven-publish`
+    id("com.gradleup.shadow") version "9.4.3"
 }
 
 java {
@@ -30,6 +31,46 @@ tasks.withType<Jar>().configureEach {
     from(rootProject.file("LICENSE")) {
         into("META-INF")
     }
+}
+
+shadow {
+    addShadowVariantIntoJavaComponent = false
+}
+
+val dependencyNotices = layout.buildDirectory.dir("dependency-notices")
+val runtimeLibraries = configurations.runtimeClasspath
+
+val collectDependencyNotices by tasks.registering {
+    inputs.files(runtimeLibraries)
+    outputs.dir(dependencyNotices)
+    doLast {
+        val target = dependencyNotices.get().asFile
+        target.deleteRecursively()
+        runtimeLibraries.get().files.filter { it.extension == "jar" }.sortedBy { it.name }.forEach { library ->
+            project.copy {
+                from(zipTree(library)) {
+                    include("META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/COPYRIGHT*", "META-INF/DEPENDENCIES*", "LICENSE*", "NOTICE*", "COPYRIGHT*", "META-INF/licenses/**")
+                }
+                into(target.resolve(library.nameWithoutExtension))
+            }
+        }
+    }
+}
+
+tasks.shadowJar {
+    archiveClassifier.set("withDependencies")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    filesMatching("META-INF/services/**") {
+        duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    }
+    mergeServiceFiles()
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/*.EC", "META-INF/INDEX.LIST", "module-info.class", "META-INF/versions/**/module-info.class")
+    dependsOn(collectDependencyNotices)
+    from(dependencyNotices) {
+        into("META-INF/third-party")
+    }
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
 }
 
 tasks.test {
