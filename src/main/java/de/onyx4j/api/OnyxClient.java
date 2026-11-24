@@ -7,6 +7,9 @@ import de.onyx4j.api.entities.channel.ServerChannel;
 import de.onyx4j.api.entities.channel.TextChannel;
 import de.onyx4j.api.entities.channel.VoiceChannel;
 import de.onyx4j.api.entities.server.Server;
+import de.onyx4j.api.entities.server.InstalledServer;
+import de.onyx4j.api.concurrent.ServerTaskExecutor;
+import de.onyx4j.api.concurrent.ServerTaskOptions;
 import de.onyx4j.api.entities.member.Member;
 import de.onyx4j.api.internal.EntityJson;
 import de.onyx4j.api.events.GatewayEvent;
@@ -74,6 +77,7 @@ public final class OnyxClient
 	private volatile EventFilter eventFilter = EventFilter.all();
 	private final GatewayEventBus gatewayEventBus;
 	private final EventBus eventBus;
+	private final ServerTaskExecutor serverTaskExecutor;
 
 	private final Object lifecycleLock = new Object();
 	private volatile boolean connected;
@@ -87,7 +91,14 @@ public final class OnyxClient
 
 	OnyxClient(String token, String baseUrl, List<OnyxListenerAdapter> listeners, RestOptions restOptions)
 	{
+		this(token, baseUrl, listeners, restOptions, ServerTaskOptions.defaults());
+	}
+
+	OnyxClient(String token, String baseUrl, List<OnyxListenerAdapter> listeners,
+			RestOptions restOptions, ServerTaskOptions taskOptions)
+	{
 		this.rest = new OnyxRestClient(token, baseUrl, restOptions);
+		this.serverTaskExecutor = new ServerTaskExecutor(taskOptions);
 		this.commandRegistry = new CommandRegistry(rest);
 		this.commandRouter = new CommandRouter(commandRegistry, this::handleError);
 		this.commandRouter.setExceptionHandler((event, error) -> event.replyEphemeral("Command execution failed.")
@@ -430,6 +441,23 @@ public final class OnyxClient
 				.thenApply(response -> new Member(this, serverId, EntityJson.requireObject(response))));
 	}
 
+	public ServerTaskExecutor getServerTaskExecutor()
+	{
+		return serverTaskExecutor;
+	}
+
+	public RestAction<List<InstalledServer>> retrieveInstalledServers()
+	{
+		return new RestAction<>(() -> rest.get("/apps/@me").thenApply(response -> {
+			JsonObject data = EntityJson.requireObject(response);
+			var entries = EntityJson.requireArray(data.get("servers"));
+			var servers = new java.util.ArrayList<InstalledServer>(entries.size());
+			for (JsonElement entry : entries)
+				servers.add(InstalledServer.fromJson(EntityJson.requireObject(entry)));
+			return List.copyOf(servers);
+		}));
+	}
+
 	public RestAction<Server> retrieveServerById(String serverId)
 	{
 		EntityJson.encode(serverId);
@@ -490,6 +518,7 @@ public final class OnyxClient
 		}
 
 		gateway.disconnect();
+		serverTaskExecutor.close();
 		rest.close();
 		autoDefer.close();
 		gatewayEventBus.close();

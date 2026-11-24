@@ -2,6 +2,7 @@ package de.onyx4j.test;
 
 import de.onyx4j.api.OnyxClient;
 import de.onyx4j.api.OnyxClientBuilder;
+import de.onyx4j.api.concurrent.ServerTaskOptions;
 import de.onyx4j.api.entities.User;
 import de.onyx4j.api.entities.message.MessageBuilder;
 import de.onyx4j.api.interactions.components.ButtonBuilder;
@@ -68,6 +69,7 @@ public final class MainTest extends OnyxListenerAdapter {
 				.addEventListeners(handler)
 				.addCommandHandlers(handler)
 				.addEventHandlers(handler)
+				.setServerTaskOptions(new ServerTaskOptions(4, 256))
 				.setBotOwnerIds(ownerId == null || ownerId.isBlank() ? new String[0] : new String[]{ownerId})
 				.addInteractionHandlers(handler)
 				.setAutoSyncCommands(true)
@@ -82,7 +84,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 	@Override
 	public void onReady(ReadyEvent event) {
-		System.out.println("Onyx4J 0.16.0 connected!");
+		System.out.println("Onyx4J 0.17.0 connected!");
 		System.out.println(
 				"Registered commands: " +
 						event.getClient()
@@ -121,7 +123,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	)
 	public void about(SlashCommandInteractionEvent event) {
 		event.reply("""
-                Onyx4J 0.16.0-SNAPSHOT
+                Onyx4J 0.17.0-SNAPSHOT
                 The Java API for Onyx
                 Java 25
                 Annotation Command Framework
@@ -142,7 +144,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 		event.reply("""
                 Status: Online
-                API Version: 0.16.0-SNAPSHOT
+                API Version: 0.17.0-SNAPSHOT
                 Java Version: %s
                 Uptime: %dh %dm %ds
                 """.formatted(
@@ -224,7 +226,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	@Override
 	public void onMessageReceived(MessageReceivedEvent event) {
 		if (event.getMessage().isAuthorBot() || !"!interactions".equals(event.getMessage().getContentRaw())) return;
-		event.getChannel().sendMessage(Components.message("Onyx4J 0.16.0 Interaction Showcase",
+		event.getChannel().sendMessage(Components.message("Onyx4J 0.17.0 Interaction Showcase",
 				Components.row(
 						Components.primary("demo:ping", "Ping"),
 						Components.secondary("demo:ticket:42", "Ticket 42"),
@@ -331,7 +333,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	@SlashCommand(name = "messagecheck", description = "Test the advanced message builder")
 	public void messageCheck(SlashCommandInteractionEvent event) {
 		event.reply(new MessageBuilder()
-				.appendLine("**Onyx4J 0.16.0**")
+				.appendLine("**Onyx4J 0.17.0**")
 				.append("MessageBuilder showcase")
 				.addRow(ComponentRow.buttons(
 						ButtonBuilder.of(ButtonStyle.PRIMARY, "demo:ping", "Ping"),
@@ -399,6 +401,41 @@ public final class MainTest extends OnyxListenerAdapter {
 		var states = event.getClient().getVoiceStateCache().getServerStates(event.getServerId());
 		event.replyEphemeral("Observed voice participants since connection: " + states.size())
 				.queue(result -> {}, this::onError);
+	}
+
+	@SlashCommand(name = "scalecheck", description = "Test server-partitioned task execution")
+	@ServerOnly
+	public void scaleCheck(SlashCommandInteractionEvent event) {
+		var executor = event.getClient().getServerTaskExecutor();
+		executor.submit(event.getServerId(), () -> {
+			var stats = executor.getStatistics();
+			return """
+					Server partition: %d / %d
+					Worker: %s
+					Queued tasks: %d
+					Running tasks: %d
+					Rejected tasks: %d
+					""".formatted(executor.getPartition(event.getServerId()), stats.partitions(),
+					Thread.currentThread().getName(), stats.queued(), stats.running(), stats.rejected());
+		}).whenComplete((result, error) -> {
+			if (error != null) {
+				onError(error);
+				event.replyEphemeral("Server task failed.").queue(response -> {}, this::onError);
+			} else {
+				event.replyEphemeral(result).queue(response -> {}, this::onError);
+			}
+		});
+	}
+
+	@SlashCommand(name = "installedservers", description = "Show installed servers")
+	@BotOwnerOnly
+	public void installedServers(SlashCommandInteractionEvent event) {
+		event.getClient().retrieveInstalledServers().queue(servers ->
+				event.replyEphemeral("Installed servers: " + servers.size())
+						.queue(response -> {}, this::onError), error -> {
+					onError(error);
+					event.replyEphemeral("Unable to retrieve installed servers.").queue(response -> {}, this::onError);
+				});
 	}
 
 	private static String loadToken() throws Exception {

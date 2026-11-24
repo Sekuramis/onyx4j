@@ -5,6 +5,8 @@ import de.onyx4j.api.events.OnyxListenerAdapter;
 import de.onyx4j.api.events.gateway.GatewayEventBus;
 import de.onyx4j.api.interactions.commands.SlashCommandData;
 import de.onyx4j.api.requests.RestOptions;
+import de.onyx4j.api.concurrent.ServerTaskOptions;
+import de.onyx4j.api.gateway.EventFilter;
 import de.onyx4j.api.interactions.commands.middleware.CommandExceptionHandler;
 
 import java.util.ArrayList;
@@ -30,6 +32,8 @@ public final class OnyxClientBuilder
 	private final java.util.List<SlashCommandData> registeredCommands = new java.util.ArrayList<>();
 	private boolean autoSyncCommands = true;
 	private RestOptions restOptions = RestOptions.defaults();
+	private ServerTaskOptions serverTaskOptions = ServerTaskOptions.defaults();
+	private EventFilter eventFilter = EventFilter.all();
 
 	private final List<OnyxListenerAdapter> listeners = new ArrayList<>();
 	private final List<Object> commandHandlers = new ArrayList<>();
@@ -70,8 +74,10 @@ public final class OnyxClientBuilder
 				token,
 				baseUrl,
 				List.copyOf(listeners),
-				restOptions
+				restOptions,
+				serverTaskOptions
 		);
+		client.setEventFilter(eventFilter);
 
 		client.getCommandRegistry()
 				.addCommands(registeredCommands.toArray(SlashCommandData[]::new))
@@ -90,6 +96,18 @@ public final class OnyxClientBuilder
 	public OnyxClientBuilder addCommands(SlashCommandData... commands)
 	{
 		registeredCommands.addAll(java.util.List.of(commands));
+		return this;
+	}
+
+	public OnyxClientBuilder setServerTaskOptions(ServerTaskOptions options)
+	{
+		serverTaskOptions = Objects.requireNonNull(options, "options");
+		return this;
+	}
+
+	public OnyxClientBuilder setEventFilter(EventFilter filter)
+	{
+		eventFilter = Objects.requireNonNull(filter, "filter");
 		return this;
 	}
 
