@@ -11,6 +11,8 @@ import de.onyx4j.api.interactions.components.SelectMenuBuilder;
 import de.onyx4j.api.entities.role.Permission;
 import de.onyx4j.api.events.OnyxListenerAdapter;
 import de.onyx4j.api.events.ReadyEvent;
+import de.onyx4j.api.events.voice.VoiceJoinEvent;
+import de.onyx4j.api.events.voice.VoiceLeaveEvent;
 import de.onyx4j.api.events.EventPriority;
 import de.onyx4j.api.events.DisconnectEvent;
 import de.onyx4j.api.events.annotation.SubscribeEvent;
@@ -80,7 +82,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 	@Override
 	public void onReady(ReadyEvent event) {
-		System.out.println("Onyx4J 0.15.0 connected!");
+		System.out.println("Onyx4J 0.16.0 connected!");
 		System.out.println(
 				"Registered commands: " +
 						event.getClient()
@@ -119,7 +121,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	)
 	public void about(SlashCommandInteractionEvent event) {
 		event.reply("""
-                Onyx4J 0.15.0-SNAPSHOT
+                Onyx4J 0.16.0-SNAPSHOT
                 The Java API for Onyx
                 Java 25
                 Annotation Command Framework
@@ -140,7 +142,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 		event.reply("""
                 Status: Online
-                API Version: 0.15.0-SNAPSHOT
+                API Version: 0.16.0-SNAPSHOT
                 Java Version: %s
                 Uptime: %dh %dm %ds
                 """.formatted(
@@ -222,7 +224,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	@Override
 	public void onMessageReceived(MessageReceivedEvent event) {
 		if (event.getMessage().isAuthorBot() || !"!interactions".equals(event.getMessage().getContentRaw())) return;
-		event.getChannel().sendMessage(Components.message("Onyx4J 0.15.0 Interaction Showcase",
+		event.getChannel().sendMessage(Components.message("Onyx4J 0.16.0 Interaction Showcase",
 				Components.row(
 						Components.primary("demo:ping", "Ping"),
 						Components.secondary("demo:ticket:42", "Ticket 42"),
@@ -329,7 +331,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	@SlashCommand(name = "messagecheck", description = "Test the advanced message builder")
 	public void messageCheck(SlashCommandInteractionEvent event) {
 		event.reply(new MessageBuilder()
-				.appendLine("**Onyx4J 0.15.0**")
+				.appendLine("**Onyx4J 0.16.0**")
 				.append("MessageBuilder showcase")
 				.addRow(ComponentRow.buttons(
 						ButtonBuilder.of(ButtonStyle.PRIMARY, "demo:ping", "Ping"),
@@ -377,6 +379,25 @@ public final class MainTest extends OnyxListenerAdapter {
 				gateway.getHeartbeatCount(), gateway.getHeartbeatTimeoutCount(), gateway.getLastHeartbeatAt(),
 				rest.requests(), rest.attempts(), rest.successful(), rest.failed(),
 				rest.retries(), rest.rateLimited(), rest.inFlight(), rest.averageDurationMillis()))
+				.queue(result -> {}, this::onError);
+	}
+
+	@SubscribeEvent
+	public void voiceJoin(VoiceJoinEvent event) {
+		System.out.println("Voice join: " + event.getUserId() + " -> " + event.getChannelId());
+	}
+
+	@SubscribeEvent
+	public void voiceLeave(VoiceLeaveEvent event) {
+		System.out.println("Voice leave: " + event.getUserId() + " -> " + event.getChannelId()
+				+ " (" + event.getDurationMillis() + " ms)");
+	}
+
+	@SlashCommand(name = "voicecheck", description = "Show observed voice states")
+	@ServerOnly
+	public void voiceCheck(SlashCommandInteractionEvent event) {
+		var states = event.getClient().getVoiceStateCache().getServerStates(event.getServerId());
+		event.replyEphemeral("Observed voice participants since connection: " + states.size())
 				.queue(result -> {}, this::onError);
 	}
 

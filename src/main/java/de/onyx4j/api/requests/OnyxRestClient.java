@@ -111,7 +111,7 @@ public final class OnyxRestClient implements AutoCloseable {
                 .timeout(options.requestTimeout())
                 .header("Accept", "application/json")
                 .header("Authorization", "Bot " + token)
-                .header("User-Agent", "onyx4j/0.15.0");
+                .header("User-Agent", "onyx4j/0.16.0");
 
         if (body != null) {
             builder.header("Content-Type", "application/json");

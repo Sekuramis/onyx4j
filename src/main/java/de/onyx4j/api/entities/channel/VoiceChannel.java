@@ -2,6 +2,9 @@ package de.onyx4j.api.entities.channel;
 
 import com.google.gson.JsonObject;
 import de.onyx4j.api.OnyxClient;
+import de.onyx4j.api.entities.voice.VoiceState;
+import de.onyx4j.api.entities.voice.VoiceToken;
+import java.util.List;
 import de.onyx4j.api.internal.EntityJson;
 import de.onyx4j.api.requests.RestAction;
 
@@ -58,6 +61,45 @@ public final class VoiceChannel implements ServerChannel {
 
     public int getBitrate() {
         return EntityJson.number(data, "bitrate");
+    }
+
+    public boolean isBotVoiceAllowed() {
+        return EntityJson.bool(data, "bots_voice");
+    }
+
+    public List<VoiceState> getCachedVoiceStates() {
+        return client.getVoiceStateCache().getChannelStates(getId());
+    }
+
+    public RestAction<VoiceToken> requestVoiceToken() {
+        return client.requestVoiceToken(getId());
+    }
+
+    public RestAction<Void> editUserLimit(int limit) {
+        if (limit < 0) throw new IllegalArgumentException("User limit cannot be negative");
+        JsonObject body = new JsonObject();
+        body.addProperty("user_limit", limit);
+        return edit(body);
+    }
+
+    public RestAction<Void> editBitrate(int bitrate) {
+        if (bitrate <= 0) throw new IllegalArgumentException("Bitrate must be positive");
+        JsonObject body = new JsonObject();
+        body.addProperty("bitrate", bitrate);
+        return edit(body);
+    }
+
+    public RestAction<Void> editBotVoiceAllowed(boolean allowed) {
+        JsonObject body = new JsonObject();
+        body.addProperty("bots_voice", allowed);
+        return edit(body);
+    }
+
+    public RestAction<Void> edit(JsonObject changes) {
+        JsonObject payload = Objects.requireNonNull(changes, "changes").deepCopy();
+        return new RestAction<>(() -> client.getRestClient()
+                .patch("/channels/" + EntityJson.encode(getId()), payload)
+                .thenApply(result -> null));
     }
 
     @Override

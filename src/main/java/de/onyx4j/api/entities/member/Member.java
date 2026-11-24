@@ -7,6 +7,7 @@ import de.onyx4j.api.entities.User;
 import de.onyx4j.api.entities.role.Permission;
 import de.onyx4j.api.entities.role.PermissionSet;
 import de.onyx4j.api.entities.role.Role;
+import de.onyx4j.api.entities.voice.VoiceState;
 import de.onyx4j.api.internal.EntityJson;
 import de.onyx4j.api.requests.RestAction;
 
@@ -53,6 +54,10 @@ public final class Member {
                 EntityJson.string(json, "username"),
                 EntityJson.string(json, "display_name")
         );
+    }
+
+    public VoiceState getCachedVoiceState() {
+        return client.getVoiceStateCache().getState(serverId, getId());
     }
 
     public String getNickname() {

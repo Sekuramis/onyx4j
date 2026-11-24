@@ -29,6 +29,10 @@ import de.onyx4j.api.events.interaction.AutocompleteInteractionEvent;
 import de.onyx4j.api.interactions.commands.CommandRegistry;
 import de.onyx4j.api.events.interaction.InteractionAutoDefer;
 import de.onyx4j.api.cache.EntityCache;
+import de.onyx4j.api.cache.VoiceStateCache;
+import de.onyx4j.api.events.voice.VoiceJoinEvent;
+import de.onyx4j.api.events.voice.VoiceLeaveEvent;
+import de.onyx4j.api.entities.voice.VoiceToken;
 import de.onyx4j.api.gateway.EventFilter;
 import de.onyx4j.api.gateway.GatewayStatus;
 import de.onyx4j.api.events.gateway.GatewayEventBus;
@@ -65,6 +69,7 @@ public final class OnyxClient
 	private final InteractionRouter interactionRouter = new InteractionRouter();
 	private final InteractionAutoDefer autoDefer = new InteractionAutoDefer(2500);
 	private final EntityCache entityCache;
+	private final VoiceStateCache voiceStateCache = new VoiceStateCache();
 	private final GatewayStatus gatewayStatus = new GatewayStatus();
 	private volatile EventFilter eventFilter = EventFilter.all();
 	private final GatewayEventBus gatewayEventBus;
@@ -144,7 +149,10 @@ public final class OnyxClient
 			reconnect = everReady;
 			everReady = true;
 			connected = true;
-			if (reconnect) entityCache.clear();
+			if (reconnect) {
+				entityCache.clear();
+				voiceStateCache.clear();
+			}
 			gatewayStatus.markReady();
 		}
 
@@ -166,7 +174,19 @@ public final class OnyxClient
 		GatewayEvent event = new GatewayEvent(this, payload);
 		String type = event.getType();
 
-		entityCache.apply(event);
+		GatewayEvent voiceEvent = event;
+		try {
+			if ("voice.joined".equals(type)) voiceEvent = new VoiceJoinEvent(this, payload);
+			else if ("voice.left".equals(type)) voiceEvent = new VoiceLeaveEvent(this, payload);
+		} catch (RuntimeException exception) {
+			handleError(exception);
+		}
+
+		synchronized (lifecycleLock) {
+			if (shuttingDown) return;
+			entityCache.apply(event);
+			voiceStateCache.apply(voiceEvent);
+		}
 
 		if (!eventFilter.allows(event))
 			return;
@@ -196,6 +216,18 @@ public final class OnyxClient
 			dispatch(listener -> listener.onMemberJoin(memberEvent));
 		}
 
+		case "voice.joined" -> {
+			if (voiceEvent instanceof VoiceJoinEvent join) {
+				eventBus.publish(join);
+				dispatch(listener -> listener.onVoiceJoin(join));
+			} else eventBus.publish(event);
+		}
+		case "voice.left" -> {
+			if (voiceEvent instanceof VoiceLeaveEvent leave) {
+				eventBus.publish(leave);
+				dispatch(listener -> listener.onVoiceLeave(leave));
+			} else eventBus.publish(event);
+		}
 		default -> eventBus.publish(event);
 		}
 	}
@@ -309,6 +341,7 @@ public final class OnyxClient
 			connected = false;
 			gatewayStatus.markDisconnected(reason);
 			entityCache.clear();
+			voiceStateCache.clear();
 		}
 		eventBus.publish(new DisconnectEvent(this, reason));
 		dispatch(listener -> listener.onDisconnect(reason));
@@ -371,6 +404,18 @@ public final class OnyxClient
 	public TextChannel getTextChannelById(String channelId)
 	{
 		return new TextChannel(this, channelId);
+	}
+
+	public VoiceStateCache getVoiceStateCache()
+	{
+		return voiceStateCache;
+	}
+
+	public RestAction<VoiceToken> requestVoiceToken(String channelId)
+	{
+		String path = "/channels/" + EntityJson.encode(channelId) + "/voice-token";
+		return new RestAction<>(() -> rest.post(path, new JsonObject())
+				.thenApply(response -> new VoiceToken(EntityJson.requireObject(response))));
 	}
 
 	public VoiceChannel getVoiceChannelById(String channelId)
@@ -436,6 +481,7 @@ public final class OnyxClient
 			connected = false;
 			gatewayStatus.markShutdown();
 			entityCache.clear();
+			voiceStateCache.clear();
 		}
 
 		if (!ready.isDone())
