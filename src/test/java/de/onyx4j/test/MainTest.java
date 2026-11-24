@@ -80,7 +80,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 	@Override
 	public void onReady(ReadyEvent event) {
-		System.out.println("Onyx4J 0.14.0 connected!");
+		System.out.println("Onyx4J 0.15.0 connected!");
 		System.out.println(
 				"Registered commands: " +
 						event.getClient()
@@ -119,7 +119,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	)
 	public void about(SlashCommandInteractionEvent event) {
 		event.reply("""
-                Onyx4J 0.14.0-SNAPSHOT
+                Onyx4J 0.15.0-SNAPSHOT
                 The Java API for Onyx
                 Java 25
                 Annotation Command Framework
@@ -140,7 +140,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 		event.reply("""
                 Status: Online
-                API Version: 0.14.0-SNAPSHOT
+                API Version: 0.15.0-SNAPSHOT
                 Java Version: %s
                 Uptime: %dh %dm %ds
                 """.formatted(
@@ -222,7 +222,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	@Override
 	public void onMessageReceived(MessageReceivedEvent event) {
 		if (event.getMessage().isAuthorBot() || !"!interactions".equals(event.getMessage().getContentRaw())) return;
-		event.getChannel().sendMessage(Components.message("Onyx4J 0.14.0 Interaction Showcase",
+		event.getChannel().sendMessage(Components.message("Onyx4J 0.15.0 Interaction Showcase",
 				Components.row(
 						Components.primary("demo:ping", "Ping"),
 						Components.secondary("demo:ticket:42", "Ticket 42"),
@@ -329,7 +329,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	@SlashCommand(name = "messagecheck", description = "Test the advanced message builder")
 	public void messageCheck(SlashCommandInteractionEvent event) {
 		event.reply(new MessageBuilder()
-				.appendLine("**Onyx4J 0.14.0**")
+				.appendLine("**Onyx4J 0.15.0**")
 				.append("MessageBuilder showcase")
 				.addRow(ComponentRow.buttons(
 						ButtonBuilder.of(ButtonStyle.PRIMARY, "demo:ping", "Ping"),
@@ -356,6 +356,28 @@ public final class MainTest extends OnyxListenerAdapter {
 	@SubscribeEvent
 	public void eventDisconnected(DisconnectEvent event) {
 		System.out.println("Annotated disconnect: " + event.getReason());
+	}
+
+	@SlashCommand(name = "health", description = "Show gateway and REST health")
+	public void health(SlashCommandInteractionEvent event) {
+		var gateway = event.getClient().getGatewayStatus();
+		var rest = event.getClient().getRestStatistics();
+		event.replyEphemeral("""
+				Gateway: %s
+				Connections: %d | Reconnects: %d
+				Reconnect attempts: %d | Errors: %d
+				Heartbeats: %d | Timeouts: %d
+				Last heartbeat: %s
+				REST requests: %d | Attempts: %d
+				Success: %d | Failed: %d
+				Retries: %d | HTTP 429: %d
+				In flight: %d | Average: %d ms
+				""".formatted(gateway.getState(), gateway.getConnectionCount(), gateway.getReconnectCount(),
+				gateway.getReconnectAttempts(), gateway.getConnectionErrors(),
+				gateway.getHeartbeatCount(), gateway.getHeartbeatTimeoutCount(), gateway.getLastHeartbeatAt(),
+				rest.requests(), rest.attempts(), rest.successful(), rest.failed(),
+				rest.retries(), rest.rateLimited(), rest.inFlight(), rest.averageDurationMillis()))
+				.queue(result -> {}, this::onError);
 	}
 
 	private static String loadToken() throws Exception {

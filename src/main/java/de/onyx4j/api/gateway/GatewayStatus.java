@@ -17,6 +17,12 @@ public final class GatewayStatus {
 	}
 
 	private final AtomicLong connectionCount = new AtomicLong();
+	private final AtomicLong reconnectAttempts = new AtomicLong();
+	private final AtomicLong connectionErrors = new AtomicLong();
+	private final AtomicLong heartbeatCount = new AtomicLong();
+	private final AtomicLong heartbeatTimeoutCount = new AtomicLong();
+	private volatile Instant lastHeartbeatAt;
+	private volatile Instant lastPacketAt;
 	private volatile State state = State.DISCONNECTED;
 	private volatile Instant lastReadyAt;
 	private volatile Instant lastDisconnectedAt;
@@ -50,6 +56,49 @@ public final class GatewayStatus {
 		return lastDisconnectReason;
 	}
 
+	public long getReconnectAttempts() {
+		return reconnectAttempts.get();
+	}
+
+	public long getConnectionErrors() {
+		return connectionErrors.get();
+	}
+
+	public long getHeartbeatCount() {
+		return heartbeatCount.get();
+	}
+
+	public long getHeartbeatTimeoutCount() {
+		return heartbeatTimeoutCount.get();
+	}
+
+	public Instant getLastHeartbeatAt() {
+		return lastHeartbeatAt;
+	}
+
+	public Instant getLastPacketAt() {
+		return lastPacketAt;
+	}
+
+	public synchronized void markReconnectAttempt() {
+		if (state == State.SHUTDOWN) return;
+		reconnectAttempts.incrementAndGet();
+		markConnecting();
+	}
+
+	public synchronized void markConnectionError() {
+		if (state != State.SHUTDOWN) connectionErrors.incrementAndGet();
+	}
+
+	public synchronized void markPacket(boolean heartbeat) {
+		if (state == State.SHUTDOWN) return;
+		lastPacketAt = Instant.now();
+		if (heartbeat) {
+			lastHeartbeatAt = lastPacketAt;
+			heartbeatCount.incrementAndGet();
+		}
+	}
+
 	public synchronized void markConnecting() {
 		if (state != State.SHUTDOWN) {
 			state = State.CONNECTING;
@@ -73,6 +122,7 @@ public final class GatewayStatus {
 		}
 		lastDisconnectedAt = Instant.now();
 		lastDisconnectReason = reason;
+		if (reason != null && "ping timeout".equalsIgnoreCase(reason)) heartbeatTimeoutCount.incrementAndGet();
 		state = State.DISCONNECTED;
 	}
 

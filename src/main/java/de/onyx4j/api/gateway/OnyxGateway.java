@@ -4,6 +4,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.socket.client.IO;
 import io.socket.client.Socket;
+import io.socket.client.Manager;
+import io.socket.engineio.client.Transport;
+import io.socket.engineio.parser.Packet;
 import io.socket.engineio.client.transports.WebSocket;
 
 
@@ -30,7 +33,8 @@ public final class OnyxGateway {
     private final Consumer<String> disconnectHandler;
     private final Consumer<Throwable> errorHandler;
 
-    private Socket socket;
+    private final GatewayStatus status;
+    private volatile Socket socket;
 
     public OnyxGateway(
             String baseUrl,
@@ -41,6 +45,21 @@ public final class OnyxGateway {
             Consumer<String> disconnectHandler,
             Consumer<Throwable> errorHandler
     ) {
+        this(baseUrl, token, readyHandler, eventHandler, interactionHandler, disconnectHandler,
+                errorHandler, new GatewayStatus());
+    }
+
+    public OnyxGateway(
+            String baseUrl,
+            String token,
+            Consumer<JsonObject> readyHandler,
+            Consumer<JsonObject> eventHandler,
+            Consumer<JsonObject> interactionHandler,
+            Consumer<String> disconnectHandler,
+            Consumer<Throwable> errorHandler,
+            GatewayStatus status
+    ) {
+        this.status = java.util.Objects.requireNonNull(status, "status");
         this.baseUrl = baseUrl;
         this.token = token;
         this.readyHandler = readyHandler;
@@ -56,6 +75,7 @@ public final class OnyxGateway {
         }
 
         IO.Options options = IO.Options.builder()
+                .setForceNew(true)
                 .setAuth(Map.of("token", token))
                 .setPath("/socket.io")
                 .setTransports(new String[]{WebSocket.NAME})
@@ -66,18 +86,36 @@ public final class OnyxGateway {
                 .setTimeout(20000)
                 .build();
 
-        socket = IO.socket(URI.create(baseUrl), options);
+        Socket current = IO.socket(URI.create(baseUrl), options);
+        socket = current;
+        status.markConnecting();
 
-        socket.on("ready", args ->
-                handleJson(args, readyHandler));
+        current.io().on(Manager.EVENT_RECONNECT_ATTEMPT, args -> {
+            if (socket == current) status.markReconnectAttempt();
+        });
+        current.io().on(Manager.EVENT_TRANSPORT, args -> {
+            if (socket != current || args.length == 0 || !(args[0] instanceof Transport transport)) return;
+            transport.on(Transport.EVENT_PACKET, packets -> {
+                if (socket == current && packets.length > 0 && packets[0] instanceof Packet<?> packet) {
+                    status.markPacket(Packet.PING.equals(packet.type) || Packet.PONG.equals(packet.type));
+                }
+            });
+        });
 
-        socket.on("event", args ->
-                handleJson(args, eventHandler));
+        current.on("ready", args -> {
+            if (socket == current) handleJson(args, readyHandler);
+        });
 
-        socket.on("interaction:create", args ->
-                handleJson(args, interactionHandler));
+        current.on("event", args -> {
+            if (socket == current) handleJson(args, eventHandler);
+        });
 
-        socket.on(Socket.EVENT_DISCONNECT, args -> {
+        current.on("interaction:create", args -> {
+            if (socket == current) handleJson(args, interactionHandler);
+        });
+
+        current.on(Socket.EVENT_DISCONNECT, args -> {
+            if (socket != current) return;
             String reason = args.length > 0
                     ? String.valueOf(args[0])
                     : "Unknown";
@@ -85,7 +123,9 @@ public final class OnyxGateway {
             disconnectHandler.accept(reason);
         });
 
-        socket.on(Socket.EVENT_CONNECT_ERROR, args -> {
+        current.on(Socket.EVENT_CONNECT_ERROR, args -> {
+            if (socket != current) return;
+            status.markConnectionError();
             if (args.length == 0 || args[0] == null) {
                 errorHandler.accept(
                         new IllegalStateException("Unknown gateway connection error")
@@ -104,7 +144,7 @@ public final class OnyxGateway {
             }
         });
 
-        socket.connect();
+        current.connect();
     }
 
     private void handleJson(
@@ -127,10 +167,12 @@ public final class OnyxGateway {
     }
 
     public synchronized void disconnect() {
-        if (socket != null) {
-            socket.disconnect();
-            socket.off();
-            socket = null;
+        Socket current = socket;
+        socket = null;
+        if (current != null) {
+            current.io().reconnection(false);
+            current.disconnect();
+            current.off();
         }
     }
 

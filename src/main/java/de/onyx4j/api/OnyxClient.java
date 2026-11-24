@@ -20,6 +20,8 @@ import de.onyx4j.api.events.message.MessageReceivedEvent;
 import de.onyx4j.api.gateway.OnyxGateway;
 import de.onyx4j.api.requests.CommandUpdateAction;
 import de.onyx4j.api.requests.OnyxRestClient;
+import de.onyx4j.api.requests.RestOptions;
+import de.onyx4j.api.requests.RestStatistics;
 import de.onyx4j.api.requests.RestAction;
 import de.onyx4j.api.events.interaction.ComponentInteractionEvent;
 import de.onyx4j.api.events.interaction.ModalInteractionEvent;
@@ -68,13 +70,19 @@ public final class OnyxClient
 	private final GatewayEventBus gatewayEventBus;
 	private final EventBus eventBus;
 
+	private final Object lifecycleLock = new Object();
 	private volatile boolean connected;
 	private volatile boolean everReady;
 	private volatile boolean shuttingDown;
 
 	OnyxClient(String token, String baseUrl, List<OnyxListenerAdapter> listeners)
 	{
-		this.rest = new OnyxRestClient(token, baseUrl);
+		this(token, baseUrl, listeners, RestOptions.defaults());
+	}
+
+	OnyxClient(String token, String baseUrl, List<OnyxListenerAdapter> listeners, RestOptions restOptions)
+	{
+		this.rest = new OnyxRestClient(token, baseUrl, restOptions);
 		this.commandRegistry = new CommandRegistry(rest);
 		this.commandRouter = new CommandRouter(commandRegistry, this::handleError);
 		this.commandRouter.setExceptionHandler((event, error) -> event.replyEphemeral("Command execution failed.")
@@ -85,51 +93,60 @@ public final class OnyxClient
 		this.entityCache = new EntityCache(this);
 
 		this.gateway = new OnyxGateway(baseUrl, token, this::handleReady, this::handleGatewayEvent,
-				this::handleInteraction, this::handleDisconnect, this::handleError);
+				this::handleInteraction, this::handleDisconnect, this::handleError, gatewayStatus);
 		this.gatewayEventBus = new GatewayEventBus(this::handleError);
 		this.eventBus = new EventBus(this::handleError);
 	}
 
 	public void connect()
 	{
-		if (!started.compareAndSet(false, true))
-			return;
+		synchronized (lifecycleLock) {
+			if (shuttingDown) throw new IllegalStateException("Client was shut down");
+			if (!started.compareAndSet(false, true)) return;
+			gatewayStatus.markConnecting();
+		}
 
-		rest.get("/apps/@me").thenCompose(result -> commandRegistry.syncIfEnabled()).whenComplete((result, error) ->
-		{
-			if (error != null)
-			{
-				ready.completeExceptionally(error);
-				handleError(error);
-				return;
+		ready.orTimeout(60, java.util.concurrent.TimeUnit.SECONDS).whenComplete((client, failure) -> {
+			if (failure instanceof java.util.concurrent.TimeoutException) {
+				shutdown();
+				handleError(failure);
 			}
-
-			try
-			{
-				gateway.connect();
-				gatewayStatus.markConnecting();
-			} catch (Exception exception)
-			{
-				ready.completeExceptionally(exception);
-				handleError(exception);
+		});
+		rest.get("/apps/@me").thenCompose(result -> {
+			synchronized (lifecycleLock) {
+				if (shuttingDown) return CompletableFuture.failedFuture(new IllegalStateException("Client was shut down"));
+				return commandRegistry.syncIfEnabled();
+			}
+		}).whenComplete((result, error) -> {
+			Throwable failure = error;
+			synchronized (lifecycleLock) {
+				if (shuttingDown) return;
+				if (failure == null) {
+					try {
+						gateway.connect();
+						return;
+					} catch (Exception exception) {
+						failure = exception;
+					}
+				}
 				gatewayStatus.markDisconnected("Connection initialization failed");
 			}
+			ready.completeExceptionally(failure);
+			handleError(failure);
 		});
 	}
 
 	private void handleReady(JsonObject data)
 	{
-		if (shuttingDown)
-			return;
-
-		boolean reconnect = everReady;
-		everReady = true;
-		connected = true;
-
-		if (reconnect)
-			entityCache.clear();
-
-		gatewayStatus.markReady();
+		boolean reconnect;
+		synchronized (lifecycleLock) {
+			if (shuttingDown || connected) return;
+			reconnect = everReady;
+			everReady = true;
+			connected = true;
+			if (reconnect) entityCache.clear();
+			gatewayStatus.markReady();
+		}
 
 		ReadyEvent event = new ReadyEvent(this, reconnect, data);
 
@@ -287,15 +304,14 @@ public final class OnyxClient
 
 	private void handleDisconnect(String reason)
 	{
-		connected = false;
-
-		if (!shuttingDown) {
-			eventBus.publish(new DisconnectEvent(this, reason));
-			dispatch(listener -> listener.onDisconnect(reason));
+		synchronized (lifecycleLock) {
+			if (shuttingDown) return;
+			connected = false;
+			gatewayStatus.markDisconnected(reason);
+			entityCache.clear();
 		}
-
-		gatewayStatus.markShutdown();
-		entityCache.clear();
+		eventBus.publish(new DisconnectEvent(this, reason));
+		dispatch(listener -> listener.onDisconnect(reason));
 
 	}
 
@@ -330,6 +346,11 @@ public final class OnyxClient
 	public OnyxClient awaitReady()
 	{
 		return ready.join();
+	}
+
+	public RestStatistics getRestStatistics()
+	{
+		return rest.getStatistics();
 	}
 
 	public CompletableFuture<OnyxClient> getReadyFuture()
@@ -409,9 +430,13 @@ public final class OnyxClient
 
 	public void shutdown()
 	{
-		shuttingDown = true;
-		connected = false;
-		started.set(false);
+		synchronized (lifecycleLock) {
+			if (shuttingDown) return;
+			shuttingDown = true;
+			connected = false;
+			gatewayStatus.markShutdown();
+			entityCache.clear();
+		}
 
 		if (!ready.isDone())
 		{
@@ -419,6 +444,7 @@ public final class OnyxClient
 		}
 
 		gateway.disconnect();
+		rest.close();
 		autoDefer.close();
 		gatewayEventBus.close();
 		eventBus.close();
