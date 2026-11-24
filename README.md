@@ -9,6 +9,7 @@
   <img src="https://img.shields.io/badge/Platform-Onyx-aaa5bd?style=for-the-badge&labelColor=15151c" alt="Onyx" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-a78bfa?style=for-the-badge&labelColor=15151c" alt="License Apache 2.0" /></a>
   <a href="https://github.com/Sekuramis/onyx4j/actions/workflows/ci.yml"><img src="https://github.com/Sekuramis/onyx4j/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/Sekuramis/onyx4j/releases"><img src="https://img.shields.io/github/v/release/Sekuramis/onyx4j?include_prereleases&style=for-the-badge&label=GitHub%20Release&color=a78bfa&labelColor=15151c" alt="GitHub Release" /></a>
 
   <h3>Build. Connect. Extend.</h3>
   <p>An independent, developer-first Java API for building applications, bots and integrations for Onyx.</p>
@@ -201,6 +202,10 @@ gradle liveSmoke
 
 The smoke test checks authentication, gateway readiness, installed servers and registered commands without synchronizing commands or sending messages. Use a dedicated test application.
 
+## Releases
+
+Browse [GitHub Releases](https://github.com/Sekuramis/onyx4j/releases) and the [changelog](CHANGELOG.md). Release candidates are marked as pre-releases. See the [release process](RELEASING.md) for maintainer instructions.
+
 ## Release roadmap
 
 | Milestone | Status |
@@ -213,7 +218,8 @@ The smoke test checks authentication, gateway readiness, installed servers and r
 | Website, documentation and JavaDocs | Online |
 | Complete live integration validation | Pending |
 | Continuous integration and secret scanning | Configured |
-| Automated release and documentation deployment | Planned |
+| Automated GitHub releases and Maven publishing | Configured |
+| Automated documentation deployment | Planned |
 | 1.0.0 Stable | Planned |
 
 ## Feedback & Security
