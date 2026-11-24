@@ -26,6 +26,12 @@ dependencies {
     testImplementation("org.yaml:snakeyaml:2.7")
 }
 
+tasks.withType<Jar>().configureEach {
+    from(rootProject.file("LICENSE")) {
+        into("META-INF")
+    }
+}
+
 tasks.test {
     useJUnitPlatform()
 }
@@ -57,6 +63,14 @@ publishing {
                 name.set("Onyx4J")
                 description.set("Java API for Onyx")
                 url.set("https://onyx4j.de")
+
+                licenses {
+                    license {
+                        name.set("The Apache License, Version 2.0")
+                        url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                        distribution.set("repo")
+                    }
+                }
             }
         }
     }
