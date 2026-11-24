@@ -71,7 +71,7 @@ jobs:
         with:
           gradle-version: '9.1.0'
       - name: Build and test
-        run: gradle --no-daemon clean build generatePomFileForOnyx4jPublication
+        run: gradle --no-daemon clean build shadowJar generatePomFileForOnyx4jPublication
       - name: Verify artifacts and prepare release notes
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -89,10 +89,15 @@ jobs:
           assert pom.findtext("m:licenses/m:license/m:name", namespaces=ns) == "The Apache License, Version 2.0"
           dist = pathlib.Path("release-dist")
           dist.mkdir()
-          for suffix in ("", "-sources", "-javadoc"):
+          for suffix in ("", "-sources", "-javadoc", "-withDependencies"):
               jar = pathlib.Path(f"build/libs/onyx4j-{version}{suffix}.jar")
               with zipfile.ZipFile(jar) as archive:
                   assert "META-INF/LICENSE" in archive.namelist()
+                  if suffix == "-withDependencies":
+                      entries = set(archive.namelist())
+                      assert "com/google/gson/Gson.class" in entries
+                      assert "io/socket/client/IO.class" in entries
+                      assert any(p.startswith("META-INF/third-party/") for p in entries)
               shutil.copy2(jar, dist)
           shutil.copy2("build/publications/onyx4j/pom-default.xml", dist / f"onyx4j-{version}.pom")
           changelog = pathlib.Path("CHANGELOG.md").read_text()
