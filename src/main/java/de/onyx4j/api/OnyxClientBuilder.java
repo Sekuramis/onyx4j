@@ -32,6 +32,7 @@ public final class OnyxClientBuilder
 	private final List<OnyxListenerAdapter> listeners = new ArrayList<>();
 	private final List<Object> commandHandlers = new ArrayList<>();
 	private final List<Object> interactionHandlers = new ArrayList<>();
+	private final List<Object> eventHandlers = new ArrayList<>();
 	private List<String> botOwnerIds = List.of();
 	private CommandExceptionHandler commandExceptionHandler;
 
@@ -77,6 +78,8 @@ public final class OnyxClientBuilder
 		if (commandExceptionHandler != null) client.getCommandRouter().setExceptionHandler(commandExceptionHandler);
 		client.getCommandRouter().registerHandlers(commandHandlers.toArray());
 		client.getInteractionRouter().registerHandlers(interactionHandlers.toArray());
+		for (Object handler : eventHandlers) client.addEventHandler(handler);
+		gatewayListeners.forEach(registration -> registration.accept(client.getGatewayEventBus()));
 		client.connect();
 		return client;
 	}
@@ -105,6 +108,11 @@ public final class OnyxClientBuilder
 		Objects.requireNonNull(handler, "handler");
 
 		gatewayListeners.add(bus -> bus.on(type, handler));
+		return this;
+	}
+
+	public OnyxClientBuilder addEventHandlers(Object... handlers) {
+		eventHandlers.addAll(List.of(handlers));
 		return this;
 	}
 

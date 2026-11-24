@@ -11,6 +11,9 @@ import de.onyx4j.api.interactions.components.SelectMenuBuilder;
 import de.onyx4j.api.entities.role.Permission;
 import de.onyx4j.api.events.OnyxListenerAdapter;
 import de.onyx4j.api.events.ReadyEvent;
+import de.onyx4j.api.events.EventPriority;
+import de.onyx4j.api.events.DisconnectEvent;
+import de.onyx4j.api.events.annotation.SubscribeEvent;
 import de.onyx4j.api.events.interaction.AutocompleteInteractionEvent;
 import de.onyx4j.api.events.interaction.ComponentInteractionEvent;
 import de.onyx4j.api.events.interaction.ModalInteractionEvent;
@@ -62,6 +65,7 @@ public final class MainTest extends OnyxListenerAdapter {
 				.createDefault(loadToken())
 				.addEventListeners(handler)
 				.addCommandHandlers(handler)
+				.addEventHandlers(handler)
 				.setBotOwnerIds(ownerId == null || ownerId.isBlank() ? new String[0] : new String[]{ownerId})
 				.addInteractionHandlers(handler)
 				.setAutoSyncCommands(true)
@@ -76,7 +80,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 	@Override
 	public void onReady(ReadyEvent event) {
-		System.out.println("Onyx4J 0.13.0 connected!");
+		System.out.println("Onyx4J 0.14.0 connected!");
 		System.out.println(
 				"Registered commands: " +
 						event.getClient()
@@ -115,7 +119,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	)
 	public void about(SlashCommandInteractionEvent event) {
 		event.reply("""
-                Onyx4J 0.13.0-SNAPSHOT
+                Onyx4J 0.14.0-SNAPSHOT
                 The Java API for Onyx
                 Java 25
                 Annotation Command Framework
@@ -136,7 +140,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 		event.reply("""
                 Status: Online
-                API Version: 0.13.0-SNAPSHOT
+                API Version: 0.14.0-SNAPSHOT
                 Java Version: %s
                 Uptime: %dh %dm %ds
                 """.formatted(
@@ -218,7 +222,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	@Override
 	public void onMessageReceived(MessageReceivedEvent event) {
 		if (event.getMessage().isAuthorBot() || !"!interactions".equals(event.getMessage().getContentRaw())) return;
-		event.getChannel().sendMessage(Components.message("Onyx4J 0.13.0 Interaction Showcase",
+		event.getChannel().sendMessage(Components.message("Onyx4J 0.14.0 Interaction Showcase",
 				Components.row(
 						Components.primary("demo:ping", "Ping"),
 						Components.secondary("demo:ticket:42", "Ticket 42"),
@@ -325,7 +329,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	@SlashCommand(name = "messagecheck", description = "Test the advanced message builder")
 	public void messageCheck(SlashCommandInteractionEvent event) {
 		event.reply(new MessageBuilder()
-				.appendLine("**Onyx4J 0.13.0**")
+				.appendLine("**Onyx4J 0.14.0**")
 				.append("MessageBuilder showcase")
 				.addRow(ComponentRow.buttons(
 						ButtonBuilder.of(ButtonStyle.PRIMARY, "demo:ping", "Ping"),
@@ -335,6 +339,23 @@ public final class MainTest extends OnyxListenerAdapter {
 						.addOption("Java", "java")
 						.addOption("Kotlin", "kotlin")))
 				.build()).queue(result -> {}, this::onError);
+	}
+
+	@SubscribeEvent(priority = EventPriority.HIGH)
+	public void eventReady(ReadyEvent event) {
+		System.out.println("Annotated ready event (reconnect=" + event.isReconnect() + ")");
+	}
+
+	@SubscribeEvent(priority = EventPriority.NORMAL, async = true)
+	public void eventCheck(MessageReceivedEvent event) {
+		if (event.getMessage().isAuthorBot() || !"!eventcheck".equals(event.getMessage().getContentRaw())) return;
+		event.getMessage().reply("Annotated event received on " + Thread.currentThread().getName())
+				.queue(result -> {}, this::onError);
+	}
+
+	@SubscribeEvent
+	public void eventDisconnected(DisconnectEvent event) {
+		System.out.println("Annotated disconnect: " + event.getReason());
 	}
 
 	private static String loadToken() throws Exception {

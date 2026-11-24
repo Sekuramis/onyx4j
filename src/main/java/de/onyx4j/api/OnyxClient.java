@@ -10,6 +10,8 @@ import de.onyx4j.api.entities.server.Server;
 import de.onyx4j.api.entities.member.Member;
 import de.onyx4j.api.internal.EntityJson;
 import de.onyx4j.api.events.GatewayEvent;
+import de.onyx4j.api.events.EventBus;
+import de.onyx4j.api.events.DisconnectEvent;
 import de.onyx4j.api.events.OnyxListenerAdapter;
 import de.onyx4j.api.events.ReadyEvent;
 import de.onyx4j.api.events.interaction.SlashCommandInteractionEvent;
@@ -64,6 +66,7 @@ public final class OnyxClient
 	private final GatewayStatus gatewayStatus = new GatewayStatus();
 	private volatile EventFilter eventFilter = EventFilter.all();
 	private final GatewayEventBus gatewayEventBus;
+	private final EventBus eventBus;
 
 	private volatile boolean connected;
 	private volatile boolean everReady;
@@ -84,6 +87,7 @@ public final class OnyxClient
 		this.gateway = new OnyxGateway(baseUrl, token, this::handleReady, this::handleGatewayEvent,
 				this::handleInteraction, this::handleDisconnect, this::handleError);
 		this.gatewayEventBus = new GatewayEventBus(this::handleError);
+		this.eventBus = new EventBus(this::handleError);
 	}
 
 	public void connect()
@@ -130,6 +134,7 @@ public final class OnyxClient
 		ReadyEvent event = new ReadyEvent(this, reconnect, data);
 
 		ready.complete(this);
+		eventBus.publish(event);
 		dispatch(listener -> listener.onReady(event));
 
 		if (reconnect)
@@ -162,6 +167,7 @@ public final class OnyxClient
 		{
 			MessageReceivedEvent messageEvent = new MessageReceivedEvent(this, payload);
 
+			eventBus.publish(messageEvent);
 			dispatch(listener -> listener.onMessageReceived(messageEvent));
 		}
 
@@ -169,12 +175,11 @@ public final class OnyxClient
 		{
 			MemberJoinEvent memberEvent = new MemberJoinEvent(this, payload);
 
+			eventBus.publish(memberEvent);
 			dispatch(listener -> listener.onMemberJoin(memberEvent));
 		}
 
-		default ->
-		{
-		}
+		default -> eventBus.publish(event);
 		}
 	}
 
@@ -198,8 +203,10 @@ public final class OnyxClient
 
 			try
 			{
-				if (!interactionRouter.dispatch(event))
+				if (!interactionRouter.dispatch(event)) {
+					eventBus.publish(event);
 					dispatch(listener -> listener.onComponentInteraction(event));
+				}
 			} catch (Exception exception)
 			{
 				handleError(exception);
@@ -214,8 +221,10 @@ public final class OnyxClient
 
 			try
 			{
-				if (!interactionRouter.dispatch(event))
+				if (!interactionRouter.dispatch(event)) {
+					eventBus.publish(event);
 					dispatch(listener -> listener.onModalInteraction(event));
+				}
 			} catch (Exception exception)
 			{
 				handleError(exception);
@@ -242,8 +251,10 @@ public final class OnyxClient
 
 			try
 			{
-				if (!commandRouter.dispatch(event))
+				if (!commandRouter.dispatch(event)) {
+					eventBus.publish(event);
 					dispatch(listener -> listener.onSlashCommandInteraction(event));
+				}
 			} catch (Exception exception)
 			{
 				handleError(exception);
@@ -258,8 +269,10 @@ public final class OnyxClient
 
 			try
 			{
-				if (!interactionRouter.dispatch(event))
+				if (!interactionRouter.dispatch(event)) {
+					eventBus.publish(event);
 					dispatch(listener -> listener.onAutocompleteInteraction(event));
+				}
 			} catch (Exception exception)
 			{
 				handleError(exception);
@@ -276,8 +289,10 @@ public final class OnyxClient
 	{
 		connected = false;
 
-		if (!shuttingDown)
+		if (!shuttingDown) {
+			eventBus.publish(new DisconnectEvent(this, reason));
 			dispatch(listener -> listener.onDisconnect(reason));
+		}
 
 		gatewayStatus.markShutdown();
 		entityCache.clear();
@@ -406,6 +421,7 @@ public final class OnyxClient
 		gateway.disconnect();
 		autoDefer.close();
 		gatewayEventBus.close();
+		eventBus.close();
 	}
 
 	public CommandRegistry getCommandRegistry()
@@ -426,6 +442,21 @@ public final class OnyxClient
 	public void setEventFilter(EventFilter filter)
 	{
 		this.eventFilter = java.util.Objects.requireNonNull(filter);
+	}
+
+	public EventBus getEventBus()
+	{
+		return eventBus;
+	}
+
+	public EventSubscription addEventHandler(Object handler)
+	{
+		return eventBus.register(handler);
+	}
+
+	public boolean removeEventHandler(Object handler)
+	{
+		return eventBus.unregister(handler);
 	}
 
 	public GatewayEventBus getGatewayEventBus()

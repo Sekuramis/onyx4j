@@ -11,7 +11,7 @@ java {
 }
 
 group = "de.onyx4j"
-version = "0.13.0-SNAPSHOT"
+version = "0.14.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
