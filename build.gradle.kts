@@ -21,7 +21,7 @@ repositories {
 dependencies {
     implementation("io.socket:socket.io-client:2.1.2")
     api("com.google.code.gson:gson:2.15.0")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.12.2")
+    testImplementation("org.junit.jupiter:junit-jupiter:6.1.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.yaml:snakeyaml:2.7")
 }
