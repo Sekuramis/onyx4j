@@ -4,122 +4,233 @@
   <br />
   <br />
 
-  <img src="https://img.shields.io/badge/Language-Java-9b8acb?style=for-the-badge&logo=openjdk&logoColor=white&labelColor=15151c" alt="Java" />
-  <img src="https://img.shields.io/badge/Status-In_Development-a78bfa?style=for-the-badge&labelColor=15151c" alt="In development" />
+  <a href="https://repo.onyx4j.de/#/releases/de/onyx4j/onyx4j"><img src="https://img.shields.io/badge/Release-1.0.0--RC2-a78bfa?style=for-the-badge&labelColor=15151c" alt="Release 1.0.0-RC2" /></a>
+  <img src="https://img.shields.io/badge/Java-25+-9b8acb?style=for-the-badge&logo=openjdk&logoColor=white&labelColor=15151c" alt="Java 25+" />
   <img src="https://img.shields.io/badge/Platform-Onyx-aaa5bd?style=for-the-badge&labelColor=15151c" alt="Onyx" />
 
   <h3>Build. Connect. Extend.</h3>
-  <p>A modern Java API for building applications, bots and integrations for Onyx.</p>
+  <p>An independent, developer-first Java API for building applications, bots and integrations for Onyx.</p>
 
-  <a href="#about">About</a> &nbsp;·&nbsp;
-  <a href="#features">Features</a> &nbsp;·&nbsp;
-  <a href="#getting-started">Getting Started</a> &nbsp;·&nbsp;
-  <a href="#roadmap">Roadmap</a> &nbsp;·&nbsp;
-  <a href="#contributing">Contributing</a>
+  <a href="https://onyx4j.de">Website</a> &nbsp;·&nbsp;
+  <a href="https://docs.onyx4j.de">Documentation</a> &nbsp;·&nbsp;
+  <a href="https://javadocs.onyx4j.de">JavaDocs</a> &nbsp;·&nbsp;
+  <a href="https://repo.onyx4j.de">Maven Repository</a> &nbsp;·&nbsp;
+  <a href="https://status.onyx4j.de">Status</a>
 </div>
 
 ---
 
 > [!IMPORTANT]
-> Onyx4J is currently under active development. APIs, methods and internal structures may change before the first stable release.
+> **Onyx4J 1.0.0-RC2 is available.** This is a release candidate, not a stable release. Local automated tests cover the REST and gateway implementation, but full live integration validation is still pending. APIs may change before 1.0.0.
 
 ## About
 
-**Onyx4J** is a Java library designed to provide developers with a clean and intuitive way to interact with the Onyx platform.
+Onyx4J provides a structured Java interface to the Onyx API and Gateway. It combines typed entities, annotation-driven command handling, event subscriptions and asynchronous REST operations so developers can focus on their applications rather than the underlying protocol.
 
-Its goal is to simplify communication with the Onyx API and Gateway, allowing developers to focus on building applications rather than managing the underlying protocol.
+Onyx4J is an independent project and is not an official Onyx SDK.
 
 ## Features
 
-The intended scope of Onyx4J includes:
-
-| Feature | Description |
+| Area | Capabilities |
 | :--- | :--- |
-| REST API | Access and manage Onyx resources through a structured Java interface. |
-| Gateway | Receive real-time events through a persistent WebSocket connection. |
-| Event System | React to platform events with dedicated Java listeners. |
-| Entity Management | Work with users, servers, channels and messages. |
-| Permissions | Interact with roles and permission structures. |
-| Asynchronous Requests | Perform API operations without blocking application threads. |
-| Reconnection | Restore gateway connectivity after interruptions. |
+| Client & Gateway | App authentication, Socket.IO connection, readiness, reconnect and connection statistics |
+| REST API | Lazy `RestAction` operations, CompletableFuture, rate-limit handling and bounded retries |
+| Commands | Slash and context commands, typed primitive options, annotation-driven routing and autocomplete |
+| Interactions | Buttons, selects, modals, sliders, ratings and deferred responses |
+| Events | Typed listeners, annotation-based subscriptions, priorities and asynchronous dispatch |
+| Entities | Users, servers, channels, members, roles, messages and local caching |
+| Permissions | Permission and role checks, owner restrictions, cooldowns and custom preconditions |
+| Rich messages | Embeds, file uploads, attachments, layouts and interactive components |
+| Application tools | Presence, direct messages, scheduled messages, panels and event webhooks |
+| Voice | Observed voice states, voice events and voice token requests |
+| Reliability | Gateway health metrics, REST statistics and partitioned local task execution |
+
+Native voice audio transport, gateway sharding and a complete inbound HTTP interaction server are not currently implemented.
 
 ## Getting Started
 
 ### Requirements
 
-- A compatible Java Development Kit (JDK)
-- Maven or Gradle
-- An Onyx application and its authentication credentials
-
-The supported Java version and exact build requirements will be documented before the initial release.
+- Java Development Kit **25 or newer**
+- Gradle or Maven
+- An Onyx application token and the required application scopes
+- A test server where your application is installed
 
 ### Installation
 
-Dependency coordinates and repository information will be published once Onyx4J is available as a package.
+Onyx4J is distributed through its own [Maven repository](https://repo.onyx4j.de).
 
-**Gradle (Kotlin DSL)**
+**Gradle — Kotlin DSL**
 
 ```kotlin
+repositories {
+    mavenCentral()
+    maven("https://repo.onyx4j.de/releases")
+}
+
 dependencies {
-    implementation("<group-id>:<artifact-id>:<version>")
+    implementation("de.onyx4j:onyx4j:1.0.0-RC2")
+}
+```
+
+**Gradle — Groovy DSL**
+
+```groovy
+repositories {
+    mavenCentral()
+    maven {
+        url = uri('https://repo.onyx4j.de/releases')
+    }
+}
+
+dependencies {
+    implementation 'de.onyx4j:onyx4j:1.0.0-RC2'
 }
 ```
 
 **Maven**
 
 ```xml
-<dependency>
-    <groupId>GROUP_ID</groupId>
-    <artifactId>ARTIFACT_ID</artifactId>
-    <version>VERSION</version>
-</dependency>
+<repositories>
+    <repository>
+        <id>onyx4j</id>
+        <url>https://repo.onyx4j.de/releases</url>
+    </repository>
+</repositories>
+
+<dependencies>
+    <dependency>
+        <groupId>de.onyx4j</groupId>
+        <artifactId>onyx4j</artifactId>
+        <version>1.0.0-RC2</version>
+    </dependency>
+</dependencies>
 ```
 
-### Quick Start
+Configure your build tool to compile and run with Java 25 or newer. The release includes the library, sources, JavaDocs, dependency metadata and checksums.
 
-A working authentication and event-listener example will be added once the public API is finalized.
+### Your first bot
+
+Set the `ONYX_BOT_TOKEN` environment variable to your application token and register a simple slash command:
+
+```java
+import de.onyx4j.api.OnyxClient;
+import de.onyx4j.api.OnyxClientBuilder;
+import de.onyx4j.api.events.interaction.SlashCommandInteractionEvent;
+import de.onyx4j.api.interactions.commands.annotation.SlashCommand;
+
+public class Bot {
+    public static void main(String[] args) {
+        OnyxClient client = OnyxClientBuilder
+                .createDefault(System.getenv("ONYX_BOT_TOKEN"))
+                .addCommandHandlers(new Bot())
+                .build();
+
+        Runtime.getRuntime().addShutdownHook(new Thread(client::close));
+        client.awaitReady();
+    }
+
+    @SlashCommand(name = "ping", description = "Check if the bot is responding")
+    public void ping(SlashCommandInteractionEvent event) {
+        event.reply("Pong!").queue();
+    }
+}
+```
+
+Run your application and invoke `/ping` in your test server.
+
+> [!WARNING]
+> Automatic command synchronization replaces the registered command list. Register your complete intended command set, use a dedicated test application, or disable synchronization with `setAutoSyncCommands(false)`.
+
+### Asynchronous REST
+
+REST actions are lazy. Use `queue()` to execute an action asynchronously and handle the returned future.
+
+```java
+client.retrieveUserById(userId).queue()
+        .thenAccept(user -> System.out.println(user.username()))
+        .exceptionally(error -> {
+            System.err.println("User lookup failed");
+            return null;
+        });
+```
+
+Use `map()` and `flatMap()` to compose actions. Avoid blocking calls such as `complete()` in gateway event handlers. Repeated execution of a REST action may send another request.
 
 ## Documentation
 
-| Resource | Status |
+| Resource | Link |
 | :--- | :--- |
-| Getting Started Guide | Planned |
-| Java API Reference | Planned |
-| Gateway Documentation | Planned |
-| Example Applications | Planned |
+| Official website | [onyx4j.de](https://onyx4j.de) |
+| Installation & Quickstart | [Developer documentation](https://docs.onyx4j.de/#quickstart) |
+| Java API Reference | [JavaDocs — RC2](https://javadocs.onyx4j.de/1.0.0-RC2/) |
+| Releases & Snapshots | [Maven repository](https://repo.onyx4j.de) |
+| Infrastructure availability | [Status page](https://status.onyx4j.de) |
 
-## Roadmap
+## Building from source
 
-The following milestones describe the intended release scope, not the current implementation status.
+For maintainers and developers with repository access, use the Gradle wrapper with JDK 25.
 
-- [ ] Core client and authentication
-- [ ] REST API integration
-- [ ] Gateway and connection lifecycle
-- [ ] Event dispatch and listener API
-- [ ] Entities and caching
-- [ ] Roles and permissions
-- [ ] Error handling and rate limits
-- [ ] Documentation and example projects
-- [ ] First public release
+```bash
+./gradlew clean build
+```
 
-## Contributing
+On Windows:
 
-Feedback, bug reports and feature suggestions are welcome. Please use the repository's issue tracker where available and include enough information to reproduce any reported issue.
+```powershell
+.\gradlew.bat clean build
+```
 
-## Security
+The build generates the library, sources and JavaDoc JARs in `build/libs/`.
 
-Never commit authentication tokens, private keys or other credentials to the repository. Security vulnerabilities should be reported privately to the project maintainers.
+### Testing
+
+RC2 passed 66 local automated tests, including a WebSocket/Engine.IO/Socket.IO fixture covering authentication payloads, heartbeat, event delivery and server-initiated reconnection.
+
+```bash
+./gradlew test
+```
+
+For an opt-in live smoke test, set `ONYX_BOT_TOKEN` locally and run:
+
+```bash
+./gradlew liveSmoke
+```
+
+The smoke test checks authentication, gateway readiness, installed servers and registered commands without synchronizing commands or sending messages. Use a dedicated test application.
+
+## Release roadmap
+
+| Milestone | Status |
+| :--- | :--- |
+| Core REST, Gateway and entity APIs | Implemented |
+| Commands, interactions and event system | Implemented |
+| Permissions, rich messaging and application features | Implemented |
+| 1.0.0-RC1 | Completed |
+| 1.0.0-RC2 | Published |
+| Website, documentation and JavaDocs | Online |
+| Complete live integration validation | Pending |
+| Automated release and documentation deployment | Planned |
+| 1.0.0 Stable | Planned |
+
+## Feedback & Security
+
+Feedback, bug reports and feature suggestions are welcome. Include the Onyx4J version, Java version, a minimal reproduction and sanitized error output. Use the repository's issue tracker where you have access.
+
+Never commit app tokens, publishing credentials or private keys. Report security vulnerabilities privately to the maintainer rather than in a public issue.
 
 ## License
 
-The project license will be specified before distribution. Refer to the repository's `LICENSE` file once available.
+Copyright © 2026 Sekuramis. All rights reserved.
+
+No open-source license has been declared. Public availability of Maven artifacts does not imply permission to redistribute or modify the source code. Refer to the existing copyright notices and contact the copyright holder for permissions.
 
 ---
 
 <div align="center">
-  <strong>Onyx4J</strong>
+  <a href="https://onyx4j.de"><strong>Onyx4J</strong></a>
   <br />
-  The Java API for Onyx
+  Build for Onyx. In Java.
   <br />
   <sub>API &nbsp;·&nbsp; Community &nbsp;·&nbsp; Development</sub>
 </div>
