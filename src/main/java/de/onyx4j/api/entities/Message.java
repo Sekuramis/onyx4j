@@ -147,6 +147,35 @@ public final class Message {
         });
     }
 
+    public boolean isPinned() {
+        return de.onyx4j.api.internal.EntityJson.bool(data, "pinned");
+    }
+
+    public RestAction<Message> togglePin() {
+        OnyxClient connectedClient = requireClient();
+        String path = "/messages/" + encode(requireMessageId()) + "/pin";
+        return new RestAction<>(() -> connectedClient.getRestClient().post(path, new JsonObject())
+                .thenApply(result -> new Message(connectedClient, result.getAsJsonObject())));
+    }
+
+    public JsonObject getCardState() {
+        JsonElement state = data.get("card_state");
+        return state != null && state.isJsonObject() ? state.getAsJsonObject().deepCopy() : new JsonObject();
+    }
+
+    public RestAction<Message> setCardState(JsonObject state, boolean merge) {
+        OnyxClient connectedClient = requireClient();
+        String path = "/messages/" + encode(requireMessageId()) + "/state";
+        JsonObject snapshot = Objects.requireNonNull(state).deepCopy();
+        if (snapshot.toString().getBytes(StandardCharsets.UTF_8).length > 16384)
+            throw new IllegalArgumentException("Card state exceeds 16 KiB");
+        JsonObject body = new JsonObject();
+        body.add("state", snapshot);
+        body.addProperty("merge", merge);
+        return new RestAction<>(() -> connectedClient.getRestClient().patch(path, body)
+                .thenApply(result -> new Message(connectedClient, result.getAsJsonObject())));
+    }
+
     public RestAction<Void> delete() {
         OnyxClient connectedClient = requireClient();
         String messageId = requireMessageId();

@@ -1,6 +1,7 @@
 package de.onyx4j.api.events;
 
 import de.onyx4j.api.events.interaction.SlashCommandInteractionEvent;
+import de.onyx4j.api.events.interaction.ContextCommandInteractionEvent;
 import de.onyx4j.api.events.member.MemberJoinEvent;
 import de.onyx4j.api.events.voice.VoiceJoinEvent;
 import de.onyx4j.api.events.voice.VoiceLeaveEvent;
@@ -38,6 +39,9 @@ public abstract class OnyxListenerAdapter {
     public void onSlashCommandInteraction(
             SlashCommandInteractionEvent event
     ) {
+    }
+
+    public void onContextCommandInteraction(ContextCommandInteractionEvent event) {
     }
 
     public void onVoiceJoin(VoiceJoinEvent event) {

@@ -9,6 +9,12 @@ import de.onyx4j.api.entities.channel.VoiceChannel;
 import de.onyx4j.api.entities.server.Server;
 import de.onyx4j.api.entities.message.Attachment;
 import de.onyx4j.api.entities.Message;
+import de.onyx4j.api.entities.User;
+import de.onyx4j.api.entities.webhook.EventWebhook;
+import de.onyx4j.api.entities.webhook.WebhookRegistration;
+import de.onyx4j.api.entities.webhook.WebhookSecret;
+import de.onyx4j.api.events.interaction.ContextCommandInteractionEvent;
+import com.google.gson.JsonArray;
 import de.onyx4j.api.entities.message.MessageData;
 import de.onyx4j.api.entities.message.MessageBuilder;
 import de.onyx4j.api.entities.message.DirectMessage;
@@ -315,8 +321,19 @@ public final class OnyxClient
 
 			JsonObject command = payload.getAsJsonObject("command");
 
-			if (command.has("type") && !command.get("type").getAsString().equals("slash"))
+			String commandType = EntityJson.string(command, "type");
+			if ("user".equals(commandType) || "message".equals(commandType)) {
+				try {
+					ContextCommandInteractionEvent context = new ContextCommandInteractionEvent(this, payload);
+					autoDefer.schedule(context::isAcknowledged, () -> context.deferReply().queue(), this::handleError);
+					eventBus.publish(context);
+					dispatch(listener -> listener.onContextCommandInteraction(context));
+				} catch (Exception exception) {
+					handleError(exception);
+				}
 				return;
+			}
+			if (commandType != null && !"slash".equals(commandType)) return;
 
 			SlashCommandInteractionEvent event = new SlashCommandInteractionEvent(this, payload);
 
@@ -501,6 +518,61 @@ public final class OnyxClient
 	public RestAction<Void> clearActivity()
 	{
 		return setPresence(Presence.activity(null));
+	}
+
+	public RestAction<User> retrieveUserById(String userId)
+	{
+		String path = "/users/" + EntityJson.encode(userId);
+		return new RestAction<>(() -> rest.get(path).thenApply(result -> {
+			JsonObject user = EntityJson.requireObject(result);
+			return new User(EntityJson.string(user, "id"), EntityJson.string(user, "username"),
+					EntityJson.string(user, "display_name"));
+		}));
+	}
+
+	public RestAction<List<EventWebhook>> retrieveEventWebhooks()
+	{
+		return new RestAction<>(() -> rest.get("/apps/@me/subs").thenApply(result -> {
+			var entries = new java.util.ArrayList<EventWebhook>();
+			for (JsonElement item : EntityJson.requireArray(result))
+				entries.add(new EventWebhook(this, EntityJson.requireObject(item)));
+			return List.copyOf(entries);
+		}));
+	}
+
+	public RestAction<WebhookRegistration> createEventWebhook(String name, String url,
+			List<String> events, List<String> channelIds)
+	{
+		if (url == null || url.isBlank()) throw new IllegalArgumentException("Webhook URL is required");
+		if (events == null || events.isEmpty()) throw new IllegalArgumentException("Webhook events are required");
+		JsonObject body = new JsonObject();
+		if (name != null) body.addProperty("name", name);
+		body.addProperty("url", url);
+		JsonArray types = new JsonArray();
+		for (String event : new java.util.LinkedHashSet<>(events)) {
+			if (event == null || event.isBlank()) throw new IllegalArgumentException("Invalid event type");
+			types.add(event);
+		}
+		body.add("events", types);
+		if (channelIds != null) {
+			JsonArray channels = new JsonArray();
+			for (String id : new java.util.LinkedHashSet<>(channelIds)) {
+				EntityJson.encode(id);
+				channels.add(id);
+			}
+			body.add("channel_ids", channels);
+		}
+		return new RestAction<>(() -> rest.post("/apps/@me/subs", body).thenApply(result -> {
+			JsonObject response = EntityJson.requireObject(result);
+			return new WebhookRegistration(new EventWebhook(this, EntityJson.requireObject(response.get("sub"))),
+					new WebhookSecret(EntityJson.string(response, "secret")));
+		}));
+	}
+
+	public RestAction<JsonArray> retrieveRegisteredCommands()
+	{
+		return new RestAction<>(() -> rest.get("/apps/@me/commands")
+				.thenApply(result -> EntityJson.requireArray(result).deepCopy()));
 	}
 
 	public RestAction<DirectMessage> sendDirectMessage(String userId, String content)

@@ -15,6 +15,14 @@ public final class Commands {
     private Commands() {
     }
 
+    public static SlashCommandData user(String name) {
+        return new SlashCommandData(name, null, "user");
+    }
+
+    public static SlashCommandData message(String name) {
+        return new SlashCommandData(name, null, "message");
+    }
+
     public static SlashCommandData slash(
             String name,
             String description

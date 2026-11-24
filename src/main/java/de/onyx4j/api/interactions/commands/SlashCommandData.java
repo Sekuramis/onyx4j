@@ -28,21 +28,19 @@ public record SlashCommandData(
     private static final Pattern NAME_PATTERN = Pattern.compile("[a-z0-9_-]{1,32}");
 
     public SlashCommandData {
-        if (name == null || !NAME_PATTERN.matcher(name).matches()) {
-            throw new IllegalArgumentException("Command name must match [a-z0-9_-]{1,32}");
-        }
-
-        if (description == null || description.isBlank()) {
-            throw new IllegalArgumentException("Command description must not be blank");
-        }
-
-        if (type == null || !type.equals("slash")) {
-            throw new IllegalArgumentException(
-                    "This command data type supports slash commands only"
-            );
-        }
-
+        if (!"slash".equals(type) && !"user".equals(type) && !"message".equals(type))
+            throw new IllegalArgumentException("Unsupported command type");
         options = List.copyOf(Objects.requireNonNull(options, "options"));
+        if ("slash".equals(type)) {
+            if (name == null || !NAME_PATTERN.matcher(name).matches())
+                throw new IllegalArgumentException("Command name must match [a-z0-9_-]{1,32}");
+            if (description == null || description.isBlank())
+                throw new IllegalArgumentException("Command description must not be blank");
+        } else {
+            if (name == null || name.isBlank() || name.length() > 32 || name.chars().anyMatch(Character::isISOControl))
+                throw new IllegalArgumentException("Invalid context command name");
+            if (!options.isEmpty()) throw new IllegalArgumentException("Context commands do not accept options");
+        }
     }
 
     public SlashCommandData(String name, String description) {
@@ -85,7 +83,7 @@ public record SlashCommandData(
         JsonObject object = new JsonObject();
 
         object.addProperty("name", name);
-        object.addProperty("description", description);
+        if ("slash".equals(type)) object.addProperty("description", description);
         object.addProperty("type", type);
 
         if (!options.isEmpty()) {

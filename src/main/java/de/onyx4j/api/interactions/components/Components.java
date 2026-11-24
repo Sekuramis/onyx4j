@@ -112,6 +112,36 @@ public final class Components {
 		return entitySelect("channel_select", customId);
 	}
 
+	public static JsonObject toggle(String customId, String label, boolean value) {
+		JsonObject component = entitySelect("toggle", customId);
+		if (isNonEmpty(label)) throw new IllegalArgumentException("Label is required");
+		component.addProperty("label", label);
+		component.addProperty("value", value);
+		return component;
+	}
+
+	public static JsonObject slider(String customId, String label, double min, double max, double step, double value) {
+		if (!Double.isFinite(min) || !Double.isFinite(max) || !Double.isFinite(step)
+				|| !Double.isFinite(value) || max <= min || step <= 0 || value < min || value > max)
+			throw new IllegalArgumentException("Invalid slider bounds");
+		JsonObject component = entitySelect("slider", customId);
+		if (label != null) component.addProperty("label", label);
+		component.addProperty("min", min);
+		component.addProperty("max", max);
+		component.addProperty("step", step);
+		component.addProperty("value", value);
+		return component;
+	}
+
+	public static JsonObject rating(String customId, int max, Integer value) {
+		if (max < 2 || max > 10 || (value != null && (value < 0 || value > max)))
+			throw new IllegalArgumentException("Invalid rating");
+		JsonObject component = entitySelect("rating", customId);
+		component.addProperty("max", max);
+		if (value != null) component.addProperty("value", value);
+		return component;
+	}
+
 	public static JsonObject row(JsonObject... components) {
 		if (components == null || components.length == 0 || components.length > 5) {
 			throw new IllegalArgumentException("A component row requires 1 to 5 components");

@@ -210,6 +210,44 @@ public final class TextChannel implements MessageChannel, ServerChannel {
         );
     }
 
+    public RestAction<List<Message>> retrievePinnedMessages() {
+        return new RestAction<>(() -> client.getRestClient().get("/channels/" + encode(id) + "/pins")
+                .thenApply(result -> {
+                    List<Message> messages = new ArrayList<>();
+                    for (JsonElement item : EntityJson.requireArray(result)) messages.add(toMessage(item));
+                    return List.copyOf(messages);
+                }));
+    }
+
+    public RestAction<Integer> bulkDeleteMessages(List<String> messageIds) {
+        var unique = new java.util.LinkedHashSet<>(messageIds);
+        if (unique.isEmpty() || unique.size() > 100)
+            throw new IllegalArgumentException("Bulk delete requires 1 to 100 unique message IDs");
+        JsonArray ids = new JsonArray();
+        for (String messageId : unique) {
+            EntityJson.encode(messageId);
+            ids.add(messageId);
+        }
+        JsonObject body = new JsonObject();
+        body.add("ids", ids);
+        return new RestAction<>(() -> client.getRestClient()
+                .post("/channels/" + encode(id) + "/messages/bulk-delete", body)
+                .thenApply(result -> EntityJson.requireObject(result).get("deleted").getAsInt()));
+    }
+
+    public RestAction<List<Message>> getHistory(int limit, String before, String around) {
+        if (limit < 1 || limit > 100) throw new IllegalArgumentException("History limit must be 1 to 100");
+        if (before != null && around != null) throw new IllegalArgumentException("Choose before or around");
+        String path = "/channels/" + encode(id) + "/messages?limit=" + limit
+                + (before == null ? "" : "&before=" + EntityJson.encode(before))
+                + (around == null ? "" : "&around=" + EntityJson.encode(around));
+        return new RestAction<>(() -> client.getRestClient().get(path).thenApply(result -> {
+            List<Message> messages = new ArrayList<>();
+            for (JsonElement item : EntityJson.requireArray(result)) messages.add(toMessage(item));
+            return List.copyOf(messages);
+        }));
+    }
+
     public RestAction<List<Panel>> retrievePanels() {
         return client.retrievePanels(id);
     }

@@ -185,6 +185,38 @@ public final class Server
 		});
 	}
 
+	public RestAction<List<ServerBan>> retrieveBans()
+	{
+		return new RestAction<>(() -> client.getRestClient().get("/servers/" + encodedId() + "/bans")
+				.thenApply(result -> {
+					List<ServerBan> bans = new ArrayList<>();
+					for (JsonElement item : EntityJson.requireArray(result))
+						bans.add(ServerBan.fromJson(EntityJson.requireObject(item)));
+					return List.copyOf(bans);
+				}));
+	}
+
+	public RestAction<List<Member>> retrieveAllMembers()
+	{
+		return new RestAction<>(() -> retrieveMemberPage(new java.util.LinkedHashMap<>(), null, 0));
+	}
+
+	private java.util.concurrent.CompletableFuture<List<Member>> retrieveMemberPage(
+			java.util.Map<String, Member> collected, String after, int page)
+	{
+		if (page >= 1000) return java.util.concurrent.CompletableFuture.failedFuture(
+				new IllegalStateException("Member pagination limit reached"));
+		return retrieveMembers(100, after).queue().thenCompose(members -> {
+			for (Member member : members) collected.put(member.getId(), member);
+			if (members.size() < 100)
+				return java.util.concurrent.CompletableFuture.completedFuture(List.copyOf(collected.values()));
+			String next = members.getLast().getId();
+			if (next == null || next.isBlank() || next.equals(after))
+				return java.util.concurrent.CompletableFuture.failedFuture(new IllegalStateException("Member pagination did not advance"));
+			return retrieveMemberPage(collected, next, page + 1);
+		});
+	}
+
 	public RestAction<Void> unban(String userId)
 	{
 		return new RestAction<>(
