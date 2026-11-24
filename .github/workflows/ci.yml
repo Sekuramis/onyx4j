@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test (Java 25)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.1.0'
+      - name: Build and test
+        run: gradle --no-daemon clean build generatePomFileForOnyx4jPublication
+      - name: Verify license metadata
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import xml.etree.ElementTree as ET
+          import zipfile
+
+          jars = list(pathlib.Path("build/libs").glob("*.jar"))
+          assert len(jars) >= 3, "Expected library, sources and JavaDoc JARs"
+          for jar in jars:
+              with zipfile.ZipFile(jar) as archive:
+                  assert "META-INF/LICENSE" in archive.namelist(), f"Missing license in {jar.name}"
+          pom = ET.parse("build/publications/onyx4j/pom-default.xml")
+          ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+          license_name = pom.findtext("m:licenses/m:license/m:name", namespaces=ns)
+          assert license_name == "The Apache License, Version 2.0", "Missing Apache-2.0 POM metadata"
+          PY
