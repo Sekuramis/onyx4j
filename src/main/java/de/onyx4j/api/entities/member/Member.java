@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import de.onyx4j.api.OnyxClient;
 import de.onyx4j.api.entities.User;
 import de.onyx4j.api.entities.role.Permission;
+import de.onyx4j.api.entities.role.PermissionSet;
 import de.onyx4j.api.entities.role.Role;
 import de.onyx4j.api.internal.EntityJson;
 import de.onyx4j.api.requests.RestAction;
@@ -79,7 +80,28 @@ public final class Member {
     }
 
     public boolean hasPermission(Permission permission) {
-        return Objects.requireNonNull(permission).isIn(getPermissionsRaw());
+        return getPermissions().has(permission);
+    }
+
+    public PermissionSet getPermissions() {
+        return new PermissionSet(isOwner() ? getPermissionsRaw() | Permission.ADMINISTRATOR.getBit() : getPermissionsRaw());
+    }
+
+    public boolean hasPermissions(Permission... permissions) {
+        return getPermissions().hasAll(permissions);
+    }
+
+    public boolean hasAnyPermission(Permission... permissions) {
+        return getPermissions().hasAny(permissions);
+    }
+
+    public boolean hasRole(String roleId) {
+        return getRoleIds().contains(Objects.requireNonNull(roleId, "roleId"));
+    }
+
+    public boolean hasRole(Role role) {
+        requireServerRole(role);
+        return hasRole(role.getId());
     }
 
     public RestAction<Void> addRole(Role role) {

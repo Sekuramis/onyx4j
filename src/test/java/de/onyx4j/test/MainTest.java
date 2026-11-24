@@ -3,6 +3,7 @@ package de.onyx4j.test;
 import de.onyx4j.api.OnyxClient;
 import de.onyx4j.api.OnyxClientBuilder;
 import de.onyx4j.api.entities.User;
+import de.onyx4j.api.entities.role.Permission;
 import de.onyx4j.api.events.OnyxListenerAdapter;
 import de.onyx4j.api.events.ReadyEvent;
 import de.onyx4j.api.events.interaction.AutocompleteInteractionEvent;
@@ -18,6 +19,8 @@ import java.util.Locale;
 import de.onyx4j.api.events.interaction.SlashCommandInteractionEvent;
 import de.onyx4j.api.interactions.commands.annotation.CommandOption;
 import de.onyx4j.api.interactions.commands.annotation.SlashCommand;
+import de.onyx4j.api.interactions.commands.annotation.RequirePermissions;
+import de.onyx4j.api.interactions.commands.annotation.ServerOnly;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.InputStream;
@@ -61,7 +64,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 	@Override
 	public void onReady(ReadyEvent event) {
-		System.out.println("Onyx4J 0.10.0 connected!");
+		System.out.println("Onyx4J 0.11.0 connected!");
 		System.out.println(
 				"Registered commands: " +
 						event.getClient()
@@ -100,7 +103,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	)
 	public void about(SlashCommandInteractionEvent event) {
 		event.reply("""
-                Onyx4J 0.10.0-SNAPSHOT
+                Onyx4J 0.11.0-SNAPSHOT
                 The Java API for Onyx
                 Java 25
                 Annotation Command Framework
@@ -121,7 +124,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 		event.reply("""
                 Status: Online
-                API Version: 0.10.0-SNAPSHOT
+                API Version: 0.11.0-SNAPSHOT
                 Java Version: %s
                 Uptime: %dh %dm %ds
                 """.formatted(
@@ -203,7 +206,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	@Override
 	public void onMessageReceived(MessageReceivedEvent event) {
 		if (event.getMessage().isAuthorBot() || !"!interactions".equals(event.getMessage().getContentRaw())) return;
-		event.getChannel().sendMessage(Components.message("Onyx4J 0.10.0 Interaction Showcase",
+		event.getChannel().sendMessage(Components.message("Onyx4J 0.11.0 Interaction Showcase",
 				Components.row(
 						Components.primary("demo:ping", "Ping"),
 						Components.secondary("demo:ticket:42", "Ticket 42"),
@@ -261,6 +264,18 @@ public final class MainTest extends OnyxListenerAdapter {
 				.stream().filter(value -> value.toLowerCase(Locale.ROOT).contains(query))
 				.map(value -> CommandOptionChoice.of(value, value)).toList();
 		event.replyChoices(choices).queue(result -> {}, this::onError);
+	}
+
+	@SlashCommand(name = "permissioncheck", description = "Test permission-based command access")
+	@RequirePermissions(Permission.MANAGE_ROLES)
+	public void permissionCheck(SlashCommandInteractionEvent event) {
+		event.replyEphemeral("Permission MANAGE_ROLES granted.").queue(result -> {}, this::onError);
+	}
+
+	@SlashCommand(name = "servercheck", description = "Test server-only command access")
+	@ServerOnly
+	public void serverCheck(SlashCommandInteractionEvent event) {
+		event.replyEphemeral("Server ID: " + event.getServerId()).queue(result -> {}, this::onError);
 	}
 
 	private static String loadToken() throws Exception {

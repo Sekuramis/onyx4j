@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 /**
  * © Copyright 24.11.2026 - 01:06 – Urheberrechtshinweis Alle Inhalte dieser Software, insbesondere der Quellcode, sind
  * urheberrechtlich geschützt. Das Urheberrecht liegt, soweit nicht ausdrücklich anders gekennzeichnet, bei @author
@@ -31,10 +32,16 @@ import java.util.Set;
 public final class CommandRouter {
 
 	private final CommandRegistry registry;
+	private final Consumer<Throwable> errorHandler;
 	private volatile Map<String, Handler> handlers = Map.of();
 
 	public CommandRouter(CommandRegistry registry) {
+		this(registry, Throwable::printStackTrace);
+	}
+
+	public CommandRouter(CommandRegistry registry, Consumer<Throwable> errorHandler) {
 		this.registry = Objects.requireNonNull(registry, "registry");
+		this.errorHandler = Objects.requireNonNull(errorHandler, "errorHandler");
 	}
 
 	public synchronized CommandRouter registerHandlers(Object... instances) {
@@ -85,8 +92,37 @@ public final class CommandRouter {
 		if (handler == null) {
 			return false;
 		}
-		handler.invoke(event);
+		if (!handler.access().isProtected()) {
+			handler.invoke(event);
+			return true;
+		}
+
+		try {
+			handler.access().authorize(event).whenComplete((allowed, error) -> {
+				try {
+					if (error != null) {
+						deny(event, "Unable to verify your permissions.");
+						errorHandler.accept(error);
+						return;
+					}
+					if (!Boolean.TRUE.equals(allowed)) {
+						deny(event, "You do not have permission to use this command here.");
+						return;
+					}
+					handler.invoke(event);
+				} catch (Exception exception) {
+					errorHandler.accept(exception);
+				}
+			});
+		} catch (Exception exception) {
+			deny(event, "Unable to verify your permissions.");
+			errorHandler.accept(exception);
+		}
 		return true;
+	}
+
+	private void deny(SlashCommandInteractionEvent event, String message) {
+		event.replyEphemeral(message).queue(result -> {}, errorHandler);
 	}
 
 	private static Handler compile(Object instance, Method method, SlashCommand annotation) {
@@ -140,7 +176,7 @@ public final class CommandRouter {
 		}
 		required.addAll(optional);
 		definition = definition.addOptions(required.toArray(CommandOptionData[]::new));
-		return new Handler(instance, method, definition, List.copyOf(bindings));
+		return new Handler(instance, method, definition, List.copyOf(bindings), CommandAccess.from(method));
 	}
 
 	private static CommandOptionType optionType(Class<?> type, Method method) {
@@ -187,7 +223,7 @@ public final class CommandRouter {
 		}
 	}
 
-	private record Handler(Object instance, Method method, SlashCommandData definition, List<Binding> bindings) {
+	private record Handler(Object instance, Method method, SlashCommandData definition, List<Binding> bindings, CommandAccess access) {
 		void invoke(SlashCommandInteractionEvent event) {
 			JsonObject options = event.getOptions();
 			Object[] arguments = new Object[bindings.size()];

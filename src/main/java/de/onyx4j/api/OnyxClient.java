@@ -7,6 +7,7 @@ import de.onyx4j.api.entities.channel.ServerChannel;
 import de.onyx4j.api.entities.channel.TextChannel;
 import de.onyx4j.api.entities.channel.VoiceChannel;
 import de.onyx4j.api.entities.server.Server;
+import de.onyx4j.api.entities.member.Member;
 import de.onyx4j.api.internal.EntityJson;
 import de.onyx4j.api.events.GatewayEvent;
 import de.onyx4j.api.events.OnyxListenerAdapter;
@@ -72,7 +73,7 @@ public final class OnyxClient
 	{
 		this.rest = new OnyxRestClient(token, baseUrl);
 		this.commandRegistry = new CommandRegistry(rest);
-		this.commandRouter = new CommandRouter(commandRegistry);
+		this.commandRouter = new CommandRouter(commandRegistry, this::handleError);
 		this.listeners = new CopyOnWriteArrayList<>(listeners);
 		this.ready = new CompletableFuture<>();
 		this.started = new AtomicBoolean();
@@ -337,6 +338,13 @@ public final class OnyxClient
 	public VoiceChannel getVoiceChannelById(String channelId)
 	{
 		return new VoiceChannel(this, channelId);
+	}
+
+	public RestAction<Member> retrieveMemberById(String serverId, String userId)
+	{
+		String path = "/servers/" + EntityJson.encode(serverId) + "/members/" + EntityJson.encode(userId);
+		return new RestAction<>(() -> rest.get(path)
+				.thenApply(response -> new Member(this, serverId, EntityJson.requireObject(response))));
 	}
 
 	public RestAction<Server> retrieveServerById(String serverId)

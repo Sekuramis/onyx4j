@@ -66,7 +66,19 @@ public final class Role {
     }
 
     public boolean hasPermission(Permission permission) {
-        return Objects.requireNonNull(permission).isIn(getPermissionsRaw());
+        return getPermissions().has(permission);
+    }
+
+    public PermissionSet getPermissions() {
+        return new PermissionSet(getPermissionsRaw());
+    }
+
+    public boolean hasPermissions(Permission... permissions) {
+        return getPermissions().hasAll(permissions);
+    }
+
+    public boolean hasAnyPermission(Permission... permissions) {
+        return getPermissions().hasAny(permissions);
     }
 
     public RestAction<Void> editName(String name) {

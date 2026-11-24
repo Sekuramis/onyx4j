@@ -32,7 +32,23 @@ public final class SlashCommandInteractionEvent {
             JsonObject payload
     ) {
         this.jda = jda;
-        this.payload = payload;
+        this.payload = java.util.Objects.requireNonNull(payload, "payload").deepCopy();
+    }
+
+    public OnyxClient getClient() {
+        return jda;
+    }
+
+    public String getServerId() {
+        return value(payload, "server_id");
+    }
+
+    public String getChannelId() {
+        return value(payload, "channel_id");
+    }
+
+    public JsonObject getRawData() {
+        return payload.deepCopy();
     }
 
     public String getName() {
