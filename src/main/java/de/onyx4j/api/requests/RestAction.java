@@ -20,15 +20,21 @@ public final class RestAction<T> {
     private final Supplier<CompletableFuture<T>> action;
 
     public RestAction(Supplier<CompletableFuture<T>> action) {
-        this.action = action;
+        this.action = java.util.Objects.requireNonNull(action, "action");
     }
 
     public CompletableFuture<T> queue() {
-        return action.get();
+        try {
+            return java.util.Objects.requireNonNull(action.get(), "action returned null");
+        } catch (RuntimeException error) {
+            return CompletableFuture.failedFuture(error);
+        }
     }
 
     public void queue(Consumer<T> success, Consumer<Throwable> failure) {
-        action.get().whenComplete((result, error) -> {
+        java.util.Objects.requireNonNull(success, "success");
+        java.util.Objects.requireNonNull(failure, "failure");
+        queue().whenComplete((result, error) -> {
             if (error != null) {
                 failure.accept(error);
             } else {
@@ -38,10 +44,16 @@ public final class RestAction<T> {
     }
 
     public <R> RestAction<R> map(Function<? super T, ? extends R> mapper) {
-        return new RestAction<>(() -> action.get().thenApply(mapper));
+        java.util.Objects.requireNonNull(mapper, "mapper");
+        return new RestAction<>(() -> queue().thenApply(mapper));
     }
 
     public T complete() {
-        return action.get().join();
+        return queue().join();
+    }
+
+    public <R> RestAction<R> flatMap(Function<? super T, RestAction<R>> mapper) {
+        java.util.Objects.requireNonNull(mapper, "mapper");
+        return new RestAction<>(() -> queue().thenCompose(value -> mapper.apply(value).queue()));
     }
 }

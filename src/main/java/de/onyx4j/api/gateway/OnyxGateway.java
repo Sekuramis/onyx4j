@@ -12,6 +12,10 @@ import io.socket.engineio.client.transports.WebSocket;
 
 import java.net.URI;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 /**
  * © Copyright 23.11.2026 - 17:10 – Urheberrechtshinweis
@@ -35,6 +39,9 @@ public final class OnyxGateway {
 
     private final GatewayStatus status;
     private volatile Socket socket;
+    private ScheduledExecutorService reconnectExecutor;
+    private ScheduledFuture<?> reconnectTask;
+    private int reconnectFailures;
 
     public OnyxGateway(
             String baseUrl,
@@ -89,6 +96,11 @@ public final class OnyxGateway {
         Socket current = IO.socket(URI.create(baseUrl), options);
         socket = current;
         status.markConnecting();
+        reconnectExecutor = Executors.newSingleThreadScheduledExecutor(task -> {
+            Thread thread = new Thread(task, "onyx4j-gateway-reconnect");
+            thread.setDaemon(true);
+            return thread;
+        });
 
         current.io().on(Manager.EVENT_RECONNECT_ATTEMPT, args -> {
             if (socket == current) status.markReconnectAttempt();
@@ -103,7 +115,10 @@ public final class OnyxGateway {
         });
 
         current.on("ready", args -> {
-            if (socket == current) handleJson(args, readyHandler);
+            if (socket == current) {
+                resetReconnect(current);
+                handleJson(args, readyHandler);
+            }
         });
 
         current.on("event", args -> {
@@ -121,11 +136,13 @@ public final class OnyxGateway {
                     : "Unknown";
 
             disconnectHandler.accept(reason);
+            if ("io server disconnect".equals(reason)) scheduleReconnect(current, false);
         });
 
         current.on(Socket.EVENT_CONNECT_ERROR, args -> {
             if (socket != current) return;
             status.markConnectionError();
+            if (!current.isActive()) scheduleReconnect(current, true);
             if (args.length == 0 || args[0] == null) {
                 errorHandler.accept(
                         new IllegalStateException("Unknown gateway connection error")
@@ -145,6 +162,27 @@ public final class OnyxGateway {
         });
 
         current.connect();
+    }
+
+    private synchronized void resetReconnect(Socket current) {
+        if (socket != current) return;
+        reconnectFailures = 0;
+        if (reconnectTask != null) reconnectTask.cancel(false);
+        reconnectTask = null;
+    }
+
+    private synchronized void scheduleReconnect(Socket current, boolean slow) {
+        if (socket != current || reconnectExecutor == null || reconnectExecutor.isShutdown()
+                || (reconnectTask != null && !reconnectTask.isDone())) return;
+        long delay = Math.min(30_000, (slow ? 5000L : 1000L) * (1L << Math.min(5, reconnectFailures++)));
+        reconnectTask = reconnectExecutor.schedule(() -> {
+            synchronized (OnyxGateway.this) {
+                reconnectTask = null;
+                if (socket != current || current.connected() || current.isActive()) return;
+                status.markReconnectAttempt();
+                current.connect();
+            }
+        }, delay, TimeUnit.MILLISECONDS);
     }
 
     private void handleJson(
@@ -169,6 +207,11 @@ public final class OnyxGateway {
     public synchronized void disconnect() {
         Socket current = socket;
         socket = null;
+        if (reconnectTask != null) reconnectTask.cancel(false);
+        reconnectTask = null;
+        if (reconnectExecutor != null) reconnectExecutor.shutdownNow();
+        reconnectExecutor = null;
+        reconnectFailures = 0;
         if (current != null) {
             current.io().reconnection(false);
             current.disconnect();

@@ -44,6 +44,8 @@ public final class CommandRegistry {
 			}
 		}
 
+		if (commands.size() + incoming.size() > 100)
+			throw new IllegalArgumentException("At most 100 commands are supported");
 		commands.putAll(incoming);
 		return this;
 	}

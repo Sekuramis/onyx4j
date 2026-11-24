@@ -68,6 +68,11 @@ public final class OnyxRestClient implements AutoCloseable {
             throw new IllegalArgumentException("Onyx base URL must not be blank");
         }
 
+        URI origin = URI.create(baseUrl);
+        if (origin.getHost() == null || origin.getUserInfo() != null || origin.getRawQuery() != null
+                || origin.getRawFragment() != null
+                || !("https".equalsIgnoreCase(origin.getScheme()) || "http".equalsIgnoreCase(origin.getScheme())))
+            throw new IllegalArgumentException("Invalid Onyx base URL");
         this.token = token;
         this.baseUrl = baseUrl.replaceAll("/+$", "") + "/api/v1";
         this.client = HttpClient.newBuilder()
@@ -80,6 +85,13 @@ public final class OnyxRestClient implements AutoCloseable {
             throw new IllegalArgumentException("HTTP method and path must be provided");
         }
         if (closed) return CompletableFuture.failedFuture(new IllegalStateException("REST client is closed"));
+        String route = path.startsWith("/") ? path : "/" + path;
+        URI relative = URI.create(route);
+        if (relative.getRawAuthority() != null || relative.getRawFragment() != null
+                || relative.getPath() == null || java.util.Arrays.stream(relative.getPath().split("/"))
+                .anyMatch(segment -> segment.equals("..") || segment.equals(".")))
+            throw new IllegalArgumentException("Invalid API route");
+        path = route;
         HttpRequest.BodyPublisher publisher = body == null
                 ? HttpRequest.BodyPublishers.noBody()
                 : HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8);
@@ -106,7 +118,7 @@ public final class OnyxRestClient implements AutoCloseable {
         if (name == null || name.isBlank() || name.chars().anyMatch(ch -> ch < 32 || ch == 127 || ch == 34 || ch == 92))
             throw new IllegalArgumentException("Invalid upload filename");
         String mime = type == null ? "application/octet-stream" : type;
-        if (!mime.matches("[a-zA-Z0-9!#        JsonElement snapshot = body == null ? null : body.deepCopy();^_.+\\-]+/[a-zA-Z0-9!#        JsonElement snapshot = body == null ? null : body.deepCopy();^_.+\\-]+"))
+        if (!mime.matches("[a-zA-Z0-9!#$&^_.+\\-]+/[a-zA-Z0-9!#$&^_.+\\-]+"))
             throw new IllegalArgumentException("Invalid MIME type");
         String boundary = "Onyx4J-" + UUID.randomUUID();
         String prefix = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + name
@@ -157,7 +169,7 @@ public final class OnyxRestClient implements AutoCloseable {
                 .timeout(timeout)
                 .header("Accept", "application/json")
                 .header("Authorization", "Bot " + token)
-                .header("User-Agent", "onyx4j/0.20.0");
+                .header("User-Agent", "onyx4j/1.0.0-RC2");
 
         if (contentType != null) builder.header("Content-Type", contentType);
         HttpRequest request = builder.method(method, body).build();
@@ -165,7 +177,7 @@ public final class OnyxRestClient implements AutoCloseable {
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                 .handle((response, exception) -> {
                     if (exception != null) {
-                        if (retryable && attempt < options.maxRetries() && method.equals("GET")) {
+                        if (!closed && retryable && attempt < options.maxRetries() && method.equals("GET")) {
                             return retryLater(method, path, body, contentType, timeout, retryable, attempt, backoff(attempt));
                         }
                         return CompletableFuture.<JsonElement>failedFuture(

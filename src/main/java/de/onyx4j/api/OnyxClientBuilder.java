@@ -79,6 +79,7 @@ public final class OnyxClientBuilder
 				restOptions,
 				serverTaskOptions
 		);
+		try {
 		client.setEventFilter(eventFilter);
 		client.configurePresence(presence);
 
@@ -94,6 +95,10 @@ public final class OnyxClientBuilder
 		gatewayListeners.forEach(registration -> registration.accept(client.getGatewayEventBus()));
 		client.connect();
 		return client;
+		} catch (RuntimeException | Error error) {
+			client.shutdown();
+			throw error;
+		}
 	}
 
 	public OnyxClientBuilder addCommands(SlashCommandData... commands)

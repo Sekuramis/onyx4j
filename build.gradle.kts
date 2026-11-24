@@ -1,5 +1,6 @@
 plugins {
     `java-library`
+    `maven-publish`
 }
 
 java {
@@ -11,7 +12,7 @@ java {
 }
 
 group = "de.onyx4j"
-version = "0.20.0-SNAPSHOT"
+version = "1.0.0-RC2"
 
 repositories {
     mavenCentral()
@@ -32,4 +33,52 @@ tasks.test {
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
     options.release = 25
+}
+
+tasks.register<JavaExec>("liveSmoke") {
+    group = "verification"
+    description = "Opt-in read-only live Onyx integration test"
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("de.onyx4j.test.LiveSmokeTest")
+    javaLauncher.set(javaToolchains.launcherFor {
+        languageVersion.set(JavaLanguageVersion.of(25))
+    })
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("onyx4j") {
+            from(components["java"])
+
+            groupId = "de.onyx4j"
+            artifactId = "onyx4j"
+
+            pom {
+                name.set("Onyx4J")
+                description.set("Java API for Onyx")
+                url.set("https://onyx4j.de")
+            }
+        }
+    }
+
+    repositories {
+        maven {
+            name = "Reposilite"
+            url = uri(
+                if (project.version.toString().endsWith("-SNAPSHOT"))
+                    "https://repo.onyx4j.de/snapshots"
+                else
+                    "https://repo.onyx4j.de/releases"
+            )
+
+            credentials {
+                username = providers.environmentVariable("REPOSILITE_USERNAME").orNull
+                password = providers.environmentVariable("REPOSILITE_PASSWORD").orNull
+            }
+
+            authentication {
+                create<BasicAuthentication>("basic")
+            }
+        }
+    }
 }

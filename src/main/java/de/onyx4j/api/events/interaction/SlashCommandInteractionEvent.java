@@ -27,6 +27,7 @@ public final class SlashCommandInteractionEvent {
 
     private boolean responded;
     private boolean ephemeral;
+    private volatile boolean initialFailed;
 
     public SlashCommandInteractionEvent(
             OnyxClient jda,
@@ -80,7 +81,7 @@ public final class SlashCommandInteractionEvent {
 
         if (command.has("options")
                 && command.get("options").isJsonObject()) {
-            return command.getAsJsonObject("options");
+            return command.getAsJsonObject("options").deepCopy();
         }
 
         return new JsonObject();
@@ -116,9 +117,7 @@ public final class SlashCommandInteractionEvent {
         return new RestAction<>(() -> {
             synchronized (this) {
                 if (responded) {
-                    return CompletableFuture.failedFuture(
-                            new IllegalStateException("Already acknowledged")
-                    );
+                    return CompletableFuture.completedFuture(null);
                 }
 
                 responded = true;
@@ -126,7 +125,7 @@ public final class SlashCommandInteractionEvent {
                 JsonObject body = new JsonObject();
                 body.addProperty("type", "defer");
 
-                return enqueue(callbackPath(), body);
+                return enqueue(callbackPath(), body, true);
             }
         });
     }
@@ -161,34 +160,34 @@ public final class SlashCommandInteractionEvent {
                     path = followupPath();
                 }
 
-                return enqueue(path, body);
+                return enqueue(path, body, path.equals(callbackPath()));
             }
         });
     }
 
     private CompletableFuture<Void> enqueue(
             String path,
-            JsonObject body
+            JsonObject body, boolean initial
     ) {
-        CompletableFuture<Void> result = pending.thenCompose(
-                unused -> jda.getRestClient()
-                        .post(path, body)
-                        .thenApply(response -> null)
-        );
-
+        CompletableFuture<Void> result = pending.thenCompose(unused -> {
+            if (initialFailed) return CompletableFuture.failedFuture(new IllegalStateException("Initial acknowledgement failed"));
+            return jda.getRestClient().post(path, body).thenApply(response -> null);
+        });
+        if (initial) result = result.whenComplete((unused, error) -> {
+            if (error != null) initialFailed = true;
+        });
         pending = result.handle((unused, error) -> null);
-
-        return result;
+        return result.copy();
     }
 
     private String callbackPath() {
-        return "/interactions/" + getId()
-                + "/" + getToken() + "/callback";
+        return "/interactions/" + de.onyx4j.api.internal.EntityJson.encode(getId())
+                + "/" + de.onyx4j.api.internal.EntityJson.encode(getToken()) + "/callback";
     }
 
     private String followupPath() {
-        return "/interactions/" + getId()
-                + "/" + getToken() + "/followup";
+        return "/interactions/" + de.onyx4j.api.internal.EntityJson.encode(getId())
+                + "/" + de.onyx4j.api.internal.EntityJson.encode(getToken()) + "/followup";
     }
 
     private static String value(JsonObject obj, String key) {

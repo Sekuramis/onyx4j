@@ -78,7 +78,7 @@ import java.util.function.Predicate;
  * Quellcode unerlaubt kopiert), macht sich gem. §§ 106 ff. UrhG strafbar und wird zudem kostenpflichtig abgemahnt und
  * muss Schadensersatz leisten (§ 97 UrhG).
  */
-public final class OnyxClient
+public final class OnyxClient implements AutoCloseable
 {
 
 	private final OnyxRestClient rest;
@@ -170,6 +170,7 @@ public final class OnyxClient
 				gatewayStatus.markDisconnected("Connection initialization failed");
 			}
 			ready.completeExceptionally(failure);
+			shutdown();
 			handleError(failure);
 		});
 	}
@@ -433,7 +434,7 @@ public final class OnyxClient
 
 	public CompletableFuture<OnyxClient> getReadyFuture()
 	{
-		return ready;
+		return ready.copy();
 	}
 
 	public boolean isConnected()
@@ -443,7 +444,7 @@ public final class OnyxClient
 
 	public void addEventListener(OnyxListenerAdapter listener)
 	{
-		listeners.add(listener);
+		listeners.add(Objects.requireNonNull(listener, "listener"));
 	}
 
 	public TextChannel getTextChannelById(String channelId)
@@ -726,6 +727,12 @@ public final class OnyxClient
 	public OnyxRestClient getRestClient()
 	{
 		return rest;
+	}
+
+	@Override
+	public void close()
+	{
+		shutdown();
 	}
 
 	public void shutdown()
