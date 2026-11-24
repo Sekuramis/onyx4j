@@ -29,6 +29,7 @@ import de.onyx4j.api.gateway.GatewayStatus;
 import de.onyx4j.api.events.gateway.GatewayEventBus;
 import de.onyx4j.api.events.gateway.EventSubscription;
 import de.onyx4j.api.interactions.commands.CommandRouter;
+import de.onyx4j.api.interactions.InteractionRouter;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -56,6 +57,7 @@ public final class OnyxClient
 	private final AtomicBoolean started;
 	private final CommandRegistry commandRegistry;
 	private final CommandRouter commandRouter;
+	private final InteractionRouter interactionRouter = new InteractionRouter();
 	private final InteractionAutoDefer autoDefer = new InteractionAutoDefer(2500);
 	private final EntityCache entityCache;
 	private final GatewayStatus gatewayStatus = new GatewayStatus();
@@ -191,7 +193,14 @@ public final class OnyxClient
 
 			autoDefer.schedule(event::isAcknowledged, () -> event.deferReply().queue(), this::handleError);
 
-			dispatch(listener -> listener.onComponentInteraction(event));
+			try
+			{
+				if (!interactionRouter.dispatch(event))
+					dispatch(listener -> listener.onComponentInteraction(event));
+			} catch (Exception exception)
+			{
+				handleError(exception);
+			}
 		}
 
 		case "modal" ->
@@ -200,7 +209,14 @@ public final class OnyxClient
 
 			autoDefer.schedule(event::isAcknowledged, () -> event.deferReply().queue(), this::handleError);
 
-			dispatch(listener -> listener.onModalInteraction(event));
+			try
+			{
+				if (!interactionRouter.dispatch(event))
+					dispatch(listener -> listener.onModalInteraction(event));
+			} catch (Exception exception)
+			{
+				handleError(exception);
+			}
 		}
 
 		case "command" ->
@@ -235,9 +251,16 @@ public final class OnyxClient
 		{
 			AutocompleteInteractionEvent event = new AutocompleteInteractionEvent(this, payload);
 
-			autoDefer.schedule(event::isAcknowledged, () -> event.deferReply().queue(), this::handleError);
+			autoDefer.schedule(event::isAcknowledged, () -> event.replyChoices().queue(), this::handleError);
 
-			dispatch(listener -> listener.onAutocompleteInteraction(event));
+			try
+			{
+				if (!interactionRouter.dispatch(event))
+					dispatch(listener -> listener.onAutocompleteInteraction(event));
+			} catch (Exception exception)
+			{
+				handleError(exception);
+			}
 		}
 
 		default ->
@@ -414,6 +437,11 @@ public final class OnyxClient
 			Duration timeout)
 	{
 		return gatewayEventBus.waitFor(type, filter, timeout);
+	}
+
+	public InteractionRouter getInteractionRouter()
+	{
+		return interactionRouter;
 	}
 
 	public CommandRouter getCommandRouter()

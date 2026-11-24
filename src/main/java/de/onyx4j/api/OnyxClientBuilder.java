@@ -30,6 +30,7 @@ public final class OnyxClientBuilder
 
 	private final List<OnyxListenerAdapter> listeners = new ArrayList<>();
 	private final List<Object> commandHandlers = new ArrayList<>();
+	private final List<Object> interactionHandlers = new ArrayList<>();
 
 	private OnyxClientBuilder(String token)
 	{
@@ -70,6 +71,7 @@ public final class OnyxClientBuilder
 				.setAutoSync(autoSyncCommands);
 
 		client.getCommandRouter().registerHandlers(commandHandlers.toArray());
+		client.getInteractionRouter().registerHandlers(interactionHandlers.toArray());
 		client.connect();
 		return client;
 	}
@@ -98,6 +100,11 @@ public final class OnyxClientBuilder
 		Objects.requireNonNull(handler, "handler");
 
 		gatewayListeners.add(bus -> bus.on(type, handler));
+		return this;
+	}
+
+	public OnyxClientBuilder addInteractionHandlers(Object... handlers) {
+		interactionHandlers.addAll(List.of(handlers));
 		return this;
 	}
 

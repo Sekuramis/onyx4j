@@ -5,6 +5,16 @@ import de.onyx4j.api.OnyxClientBuilder;
 import de.onyx4j.api.entities.User;
 import de.onyx4j.api.events.OnyxListenerAdapter;
 import de.onyx4j.api.events.ReadyEvent;
+import de.onyx4j.api.events.interaction.AutocompleteInteractionEvent;
+import de.onyx4j.api.events.interaction.ComponentInteractionEvent;
+import de.onyx4j.api.events.interaction.ModalInteractionEvent;
+import de.onyx4j.api.events.message.MessageReceivedEvent;
+import de.onyx4j.api.interactions.annotation.*;
+import de.onyx4j.api.interactions.commands.CommandOptionChoice;
+import de.onyx4j.api.interactions.components.Components;
+import de.onyx4j.api.interactions.modals.ModalForm;
+import java.util.List;
+import java.util.Locale;
 import de.onyx4j.api.events.interaction.SlashCommandInteractionEvent;
 import de.onyx4j.api.interactions.commands.annotation.CommandOption;
 import de.onyx4j.api.interactions.commands.annotation.SlashCommand;
@@ -38,6 +48,7 @@ public final class MainTest extends OnyxListenerAdapter {
 				.createDefault(loadToken())
 				.addEventListeners(handler)
 				.addCommandHandlers(handler)
+				.addInteractionHandlers(handler)
 				.setAutoSyncCommands(true)
 				.build();
 
@@ -50,7 +61,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 	@Override
 	public void onReady(ReadyEvent event) {
-		System.out.println("Onyx4J 0.9.0 connected!");
+		System.out.println("Onyx4J 0.10.0 connected!");
 		System.out.println(
 				"Registered commands: " +
 						event.getClient()
@@ -89,7 +100,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	)
 	public void about(SlashCommandInteractionEvent event) {
 		event.reply("""
-                Onyx4J 0.9.0-SNAPSHOT
+                Onyx4J 0.10.0-SNAPSHOT
                 The Java API for Onyx
                 Java 25
                 Annotation Command Framework
@@ -110,7 +121,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 		event.reply("""
                 Status: Online
-                API Version: 0.9.0-SNAPSHOT
+                API Version: 0.10.0-SNAPSHOT
                 Java Version: %s
                 Uptime: %dh %dm %ds
                 """.formatted(
@@ -187,6 +198,69 @@ public final class MainTest extends OnyxListenerAdapter {
 		event.reply(
 				"Result: " + (first + second)
 		).queue();
+	}
+
+	@Override
+	public void onMessageReceived(MessageReceivedEvent event) {
+		if (event.getMessage().isAuthorBot() || !"!interactions".equals(event.getMessage().getContentRaw())) return;
+		event.getChannel().sendMessage(Components.message("Onyx4J 0.10.0 Interaction Showcase",
+				Components.row(
+						Components.primary("demo:ping", "Ping"),
+						Components.secondary("demo:ticket:42", "Ticket 42"),
+						Components.secondary("demo:feedback", "Feedback")),
+				Components.row(Components.select("demo:language", "Choose a language",
+						Components.option("Java", "java"),
+						Components.option("Kotlin", "kotlin"))),
+				Components.row(Components.primary("demo:generic", "Generic component"))
+		)).queue(message -> {}, this::onError);
+	}
+
+	@ButtonInteraction("demo:ping")
+	public void buttonPing(ComponentInteractionEvent event) {
+		event.replyEphemeral("Pong from a button!").queue(result -> {}, this::onError);
+	}
+
+	@ButtonInteraction("demo:ticket:{ticketId}")
+	public void ticket(ComponentInteractionEvent event, @PathParam("ticketId") long ticketId) {
+		event.replyEphemeral("Ticket ID: " + ticketId).queue(result -> {}, this::onError);
+	}
+
+	@SelectInteraction("demo:language")
+	public void language(ComponentInteractionEvent event) {
+		event.replyEphemeral("Selected: " + String.join(", ", event.getValues())).queue(result -> {}, this::onError);
+	}
+
+	@ButtonInteraction("demo:feedback")
+	public void feedbackButton(ComponentInteractionEvent event) {
+		event.openModal(ModalForm.create("demo:feedback:submit", "Feedback")
+				.paragraphField("feedback", "Your feedback", true)
+				.submitLabel("Send")).queue(result -> {}, this::onError);
+	}
+
+	@ModalInteraction("demo:feedback:submit")
+	public void feedback(ModalInteractionEvent event, @ModalField("feedback") String feedback) {
+		event.replyEphemeral("Feedback received (" + feedback.length() + " characters).")
+				.queue(result -> {}, this::onError);
+	}
+
+	@ComponentInteraction("demo:generic")
+	public void generic(ComponentInteractionEvent event) {
+		event.replyEphemeral("Component type: " + event.getComponentType()).queue(result -> {}, this::onError);
+	}
+
+	@SlashCommand(name = "search", description = "Test autocomplete")
+	public void search(SlashCommandInteractionEvent event,
+			@CommandOption(name = "query", description = "Search languages", autocomplete = true) String query) {
+		event.reply("Search: " + query).queue(result -> {}, this::onError);
+	}
+
+	@Autocomplete(command = "search", option = "query")
+	public void autocomplete(AutocompleteInteractionEvent event) {
+		String query = event.getFocusedValue().toLowerCase(Locale.ROOT);
+		List<CommandOptionChoice> choices = List.of("Java", "Kotlin", "Rust", "Python", "JavaScript")
+				.stream().filter(value -> value.toLowerCase(Locale.ROOT).contains(query))
+				.map(value -> CommandOptionChoice.of(value, value)).toList();
+		event.replyChoices(choices).queue(result -> {}, this::onError);
 	}
 
 	private static String loadToken() throws Exception {
