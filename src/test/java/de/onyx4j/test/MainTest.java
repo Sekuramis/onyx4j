@@ -3,6 +3,11 @@ package de.onyx4j.test;
 import de.onyx4j.api.OnyxClient;
 import de.onyx4j.api.OnyxClientBuilder;
 import de.onyx4j.api.entities.User;
+import de.onyx4j.api.entities.message.MessageBuilder;
+import de.onyx4j.api.interactions.components.ButtonBuilder;
+import de.onyx4j.api.interactions.components.ButtonStyle;
+import de.onyx4j.api.interactions.components.ComponentRow;
+import de.onyx4j.api.interactions.components.SelectMenuBuilder;
 import de.onyx4j.api.entities.role.Permission;
 import de.onyx4j.api.events.OnyxListenerAdapter;
 import de.onyx4j.api.events.ReadyEvent;
@@ -71,7 +76,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 	@Override
 	public void onReady(ReadyEvent event) {
-		System.out.println("Onyx4J 0.12.0 connected!");
+		System.out.println("Onyx4J 0.13.0 connected!");
 		System.out.println(
 				"Registered commands: " +
 						event.getClient()
@@ -110,7 +115,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	)
 	public void about(SlashCommandInteractionEvent event) {
 		event.reply("""
-                Onyx4J 0.12.0-SNAPSHOT
+                Onyx4J 0.13.0-SNAPSHOT
                 The Java API for Onyx
                 Java 25
                 Annotation Command Framework
@@ -131,7 +136,7 @@ public final class MainTest extends OnyxListenerAdapter {
 
 		event.reply("""
                 Status: Online
-                API Version: 0.12.0-SNAPSHOT
+                API Version: 0.13.0-SNAPSHOT
                 Java Version: %s
                 Uptime: %dh %dm %ds
                 """.formatted(
@@ -213,7 +218,7 @@ public final class MainTest extends OnyxListenerAdapter {
 	@Override
 	public void onMessageReceived(MessageReceivedEvent event) {
 		if (event.getMessage().isAuthorBot() || !"!interactions".equals(event.getMessage().getContentRaw())) return;
-		event.getChannel().sendMessage(Components.message("Onyx4J 0.12.0 Interaction Showcase",
+		event.getChannel().sendMessage(Components.message("Onyx4J 0.13.0 Interaction Showcase",
 				Components.row(
 						Components.primary("demo:ping", "Ping"),
 						Components.secondary("demo:ticket:42", "Ticket 42"),
@@ -315,6 +320,21 @@ public final class MainTest extends OnyxListenerAdapter {
 					? PreconditionResult.deny("A server context is required.")
 					: PreconditionResult.allow();
 		}
+	}
+
+	@SlashCommand(name = "messagecheck", description = "Test the advanced message builder")
+	public void messageCheck(SlashCommandInteractionEvent event) {
+		event.reply(new MessageBuilder()
+				.appendLine("**Onyx4J 0.13.0**")
+				.append("MessageBuilder showcase")
+				.addRow(ComponentRow.buttons(
+						ButtonBuilder.of(ButtonStyle.PRIMARY, "demo:ping", "Ping"),
+						ButtonBuilder.of(ButtonStyle.SECONDARY, "demo:feedback", "Feedback")))
+				.addRow(ComponentRow.select(new SelectMenuBuilder("demo:language")
+						.setPlaceholder("Choose a language")
+						.addOption("Java", "java")
+						.addOption("Kotlin", "kotlin")))
+				.build()).queue(result -> {}, this::onError);
 	}
 
 	private static String loadToken() throws Exception {

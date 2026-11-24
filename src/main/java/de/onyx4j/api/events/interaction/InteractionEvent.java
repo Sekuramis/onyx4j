@@ -5,6 +5,7 @@ import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import de.onyx4j.api.OnyxClient;
 import de.onyx4j.api.entities.User;
+import de.onyx4j.api.entities.message.MessageData;
 import de.onyx4j.api.requests.RestAction;
 
 import java.net.URLEncoder;
@@ -84,6 +85,26 @@ public abstract class InteractionEvent {
 
 	public RestAction<Void> replyEphemeral(String message) {
 		return reply(messagePayload(message), true);
+	}
+
+	public RestAction<Void> reply(MessageData message) {
+		return reply(message.toInteractionJson());
+	}
+
+	public RestAction<Void> replyEphemeral(MessageData message) {
+		return replyEphemeral(message.toInteractionJson());
+	}
+
+	public RestAction<Void> updateMessage(MessageData message) {
+		return updateMessage(message.toInteractionJson());
+	}
+
+	public RestAction<Void> followup(MessageData message, boolean ephemeral) {
+		return followup(message.toInteractionJson(), ephemeral);
+	}
+
+	public RestAction<Void> editOriginalReply(MessageData message) {
+		return editOriginalReply(message.toInteractionJson());
 	}
 
 	public RestAction<Void> reply(JsonObject message) {

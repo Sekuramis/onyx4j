@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import de.onyx4j.api.OnyxClient;
 import de.onyx4j.api.requests.RestAction;
 import de.onyx4j.api.entities.User;
+import de.onyx4j.api.entities.message.MessageData;
 
 import java.util.concurrent.CompletableFuture;
 /**
@@ -103,6 +104,14 @@ public final class SlashCommandInteractionEvent {
         return respond("ephemeral", message);
     }
 
+    public RestAction<Void> reply(MessageData message) {
+        return respond("reply", message.toInteractionJson());
+    }
+
+    public RestAction<Void> replyEphemeral(MessageData message) {
+        return respond("ephemeral", message.toInteractionJson());
+    }
+
     public RestAction<Void> deferReply() {
         return new RestAction<>(() -> {
             synchronized (this) {
@@ -123,11 +132,17 @@ public final class SlashCommandInteractionEvent {
     }
 
     private RestAction<Void> respond(String type, String message) {
+        JsonObject data = new JsonObject();
+        data.addProperty("content", java.util.Objects.requireNonNull(message, "message"));
+        return respond(type, data);
+    }
+
+    private RestAction<Void> respond(String type, JsonObject message) {
+        JsonObject snapshot = message.deepCopy();
         return new RestAction<>(() -> {
             synchronized (this) {
                 JsonObject body = new JsonObject();
-                JsonObject data = new JsonObject();
-                data.addProperty("content", message);
+                JsonObject data = snapshot.deepCopy();
 
                 String path;
 

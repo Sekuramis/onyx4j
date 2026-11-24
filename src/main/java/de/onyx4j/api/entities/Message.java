@@ -1,9 +1,11 @@
 package de.onyx4j.api.entities;
 
 import com.google.gson.JsonElement;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import de.onyx4j.api.OnyxClient;
 import de.onyx4j.api.entities.channel.TextChannel;
+import de.onyx4j.api.entities.message.MessageData;
 import de.onyx4j.api.requests.RestAction;
 
 import java.net.URLEncoder;
@@ -87,6 +89,16 @@ public final class Message {
 
     public RestAction<Message> reply(String content) {
         return getChannel().sendReply(requireMessageId(), content);
+    }
+
+    public RestAction<Message> reply(MessageData messageData) {
+        return getChannel().sendReply(requireMessageId(), messageData);
+    }
+
+    public JsonArray getComponents() {
+        JsonElement components = data.get("components");
+        return components != null && components.isJsonArray()
+                ? components.getAsJsonArray().deepCopy() : new JsonArray();
     }
 
     public RestAction<Message> editMessage(String content) {

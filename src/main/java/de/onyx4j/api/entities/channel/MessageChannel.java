@@ -2,6 +2,7 @@ package de.onyx4j.api.entities.channel;
 
 import de.onyx4j.api.OnyxClient;
 import de.onyx4j.api.entities.Message;
+import de.onyx4j.api.entities.message.MessageData;
 import de.onyx4j.api.requests.RestAction;
 
 import java.util.List;
@@ -23,6 +24,10 @@ public interface MessageChannel {
     OnyxClient getClient();
 
     RestAction<Message> sendMessage(String content);
+
+    default RestAction<Message> sendMessage(MessageData data) {
+        return getClient().getTextChannelById(getId()).sendMessage(data);
+    }
 
     RestAction<Message> retrieveMessageById(String messageId);
 

@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import de.onyx4j.api.OnyxClient;
 import de.onyx4j.api.entities.Message;
+import de.onyx4j.api.entities.message.MessageData;
 import de.onyx4j.api.internal.EntityJson;
 import de.onyx4j.api.requests.RestAction;
 
@@ -131,6 +132,15 @@ public final class TextChannel implements MessageChannel, ServerChannel {
         });
     }
 
+    @Override
+    public RestAction<Message> sendMessage(MessageData messageData) {
+        return sendMessage(Objects.requireNonNull(messageData, "messageData").toJson());
+    }
+
+    public RestAction<Message> sendReply(String messageId, MessageData messageData) {
+        return sendMessage(Objects.requireNonNull(messageData, "messageData").withReplyTo(messageId));
+    }
+
     public RestAction<Message> sendMessage(JsonObject messageData) {
         JsonObject payload = java.util.Objects
                 .requireNonNull(messageData)
@@ -208,7 +218,10 @@ public final class TextChannel implements MessageChannel, ServerChannel {
         if (result == null || !result.isJsonObject()) {
             throw new IllegalStateException("Onyx returned an invalid message response");
         }
-        return new Message(client, result.getAsJsonObject());
+        JsonObject message = result.getAsJsonObject().deepCopy();
+        if (!message.has("channel_id") || message.get("channel_id").isJsonNull())
+            message.addProperty("channel_id", id);
+        return new Message(client, message);
     }
 
     private static String encode(String value) {
