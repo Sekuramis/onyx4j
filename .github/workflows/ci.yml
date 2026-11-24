@@ -33,7 +33,7 @@ jobs:
         with:
           gradle-version: '9.1.0'
       - name: Build and test
-        run: gradle --no-daemon clean build generatePomFileForOnyx4jPublication
+        run: gradle --no-daemon clean build shadowJar generatePomFileForOnyx4jPublication
       - name: Verify license metadata
         run: |
           python3 - <<'PY'
@@ -42,10 +42,17 @@ jobs:
           import zipfile
 
           jars = list(pathlib.Path("build/libs").glob("*.jar"))
-          assert len(jars) >= 3, "Expected library, sources and JavaDoc JARs"
+          assert len(jars) == 4, "Expected library, sources, JavaDoc and standalone JARs"
           for jar in jars:
               with zipfile.ZipFile(jar) as archive:
                   assert "META-INF/LICENSE" in archive.namelist(), f"Missing license in {jar.name}"
+                  if jar.name.endswith("-withDependencies.jar"):
+                      entries = set(archive.namelist())
+                      assert "de/onyx4j/api/OnyxClient.class" in entries
+                      assert "com/google/gson/Gson.class" in entries
+                      assert "io/socket/client/IO.class" in entries
+                      assert any(p.startswith("META-INF/third-party/") for p in entries)
+          assert any(j.name.endswith("-withDependencies.jar") for j in jars)
           pom = ET.parse("build/publications/onyx4j/pom-default.xml")
           ns = {"m": "http://maven.apache.org/POM/4.0.0"}
           license_name = pom.findtext("m:licenses/m:license/m:name", namespaces=ns)
